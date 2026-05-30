@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WebDAV 音乐源</title>
+    <link rel="stylesheet" href="static/css/fonts.css">
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <!-- AppBar -->
+    <header class="app-bar">
+        <span class="material-symbols-outlined">cloud_sync</span>
+        <h1>WebDAV 音乐源</h1>
+        <button class="btn-icon" id="refreshBtn" title="刷新">
+            <span class="material-symbols-outlined">refresh</span>
+        </button>
+    </header>
+
+    <!-- Tab 1: 服务器管理 -->
+    <div class="tab-content active" id="tab-servers">
+        <div class="container">
+            <!-- 添加服务器卡片 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="material-symbols-outlined">add_link</span>
+                    添加 WebDAV 服务器
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">配置名称</label>
+                        <input type="text" class="text-field" id="davName" placeholder="例如：我的家用 NAS">
+                    </div>
+                    <div class="form-group" style="margin-top:12px">
+                        <label class="form-label">服务器地址</label>
+                        <input type="text" class="text-field" id="davUrl" placeholder="例如：https://nas.example.com/webdav">
+                    </div>
+                    <div class="form-group" style="margin-top:12px">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="text-field" id="davUsername" placeholder="WebDAV 用户名">
+                    </div>
+                    <div class="form-group" style="margin-top:12px">
+                        <label class="form-label">密码</label>
+                        <input type="password" class="text-field" id="davPassword" placeholder="WebDAV 密码">
+                    </div>
+                    <div class="toolbar" style="padding:16px 0 0;justify-content:flex-end">
+                        <button class="btn-filled" id="addServerBtn">
+                            <span class="material-symbols-outlined">save</span>
+                            保存服务器
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 已配置的服务器 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="material-symbols-outlined">dns</span>
+                    已配置的服务器
+                </div>
+                <div class="card-body" id="serverList">
+                    <div class="empty-state">暂无服务器，请先添加</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: 文件浏览 -->
+    <div class="tab-content" id="tab-browser">
+        <div class="container">
+            <!-- 服务器选择 -->
+            <div class="card">
+                <div class="card-body" style="display:flex;gap:12px;align-items:center;">
+                    <span class="material-symbols-outlined" style="color:var(--md-primary)">storage</span>
+                    <select id="browserServerSelect" class="text-field" style="flex:1">
+                        <option value="">请选择服务器...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div class="card" style="margin-top:16px">
+                <div class="card-header" style="padding-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:8px;width:100%">
+                        <button class="btn-icon" id="browserUpBtn" title="返回上一级">
+                            <span class="material-symbols-outlined">arrow_upward</span>
+                        </button>
+                        <div style="flex:1;font-size:14px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="browserPathDisplay">/</div>
+                    </div>
+                </div>
+                <div class="card-body" id="browserList" style="padding-top:0">
+                    <div class="empty-state">请选择服务器进行浏览</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <nav class="tab-bar">
+        <button class="tab-item active" data-tab="servers">
+            <span class="material-symbols-outlined">dns</span>
+            <span>服务器管理</span>
+        </button>
+        <button class="tab-item" data-tab="browser">
+            <span class="material-symbols-outlined">folder</span>
+            <span>文件浏览</span>
+        </button>
+    </nav>
+
+    <!-- Snackbar -->
+    <div id="snackbar" class="snackbar"></div>
+
+    <script type="module" src="static/js/app.js"></script>
+</body>
+</html>
