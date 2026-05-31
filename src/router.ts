@@ -96,14 +96,14 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
 })
 
 // 全局搜索 - WebDAV 无法提供全局检索，返回空
-router.post('/search', createSearchHandler({
+router.post('/api/search', createSearchHandler({
   search: async () => {
     return []
   }
 }))
 
 // 播放链接解析
-router.post('/music/url', createMusicUrlHandler({
+router.post('/api/music/url', createMusicUrlHandler({
   resolveUrl: async (sourceData: Record<string, unknown>) => {
     const configName = sourceData.configName as string
     const path = sourceData.path as string
