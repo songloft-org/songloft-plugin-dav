@@ -92,3 +92,13 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
     }
   })
 }
+
+export function buildStreamUrl(config: DavConfig, path: string): string {
+  const urlObj = new URL(config.url)
+  if (config.username && config.password) {
+    urlObj.username = config.username
+    urlObj.password = config.password
+  }
+  const encodedPath = path.split('/').map(s => encodeURIComponent(s)).join('/')
+  return urlObj.toString().replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)
+}

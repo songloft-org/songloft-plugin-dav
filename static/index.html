@@ -43,7 +43,11 @@
                         <label class="form-label">密码</label>
                         <input type="password" class="text-field" id="davPassword" placeholder="WebDAV 密码">
                     </div>
-                    <div class="toolbar" style="padding:16px 0 0;justify-content:flex-end">
+                    <div class="toolbar" style="padding:16px 0 0;justify-content:flex-end;gap:12px;display:flex;">
+                        <button class="btn-outlined" id="testServerBtn" style="color:var(--md-primary);border:1px solid var(--md-primary);background:transparent;padding:0 16px;border-radius:20px;display:inline-flex;align-items:center;gap:8px;height:40px;cursor:pointer;">
+                            <span class="material-symbols-outlined">wifi_tethering</span>
+                            测试连接
+                        </button>
                         <button class="btn-filled" id="addServerBtn">
                             <span class="material-symbols-outlined">save</span>
                             保存服务器
@@ -86,6 +90,9 @@
                             <span class="material-symbols-outlined">arrow_upward</span>
                         </button>
                         <div style="flex:1;font-size:14px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="browserPathDisplay">/</div>
+                        <button class="btn-text" id="toggleSelectModeBtn" style="display:none;">
+                            <span class="material-symbols-outlined">checklist</span> 多选
+                        </button>
                     </div>
                 </div>
                 <div class="card-body" id="browserList" style="padding-top:0">
@@ -107,8 +114,50 @@
         </button>
     </nav>
 
+    <!-- FAB (Floating Action Bar) -->
+    <div id="fabContainer" class="fab-container">
+        <div style="display:flex;align-items:center;gap:12px;width:100%;">
+            <span id="fabSelectionCount" style="font-weight:500;font-size:14px;flex:1;">已选 0 项</span>
+            <button class="btn-text" id="fabCancelBtn" style="color:var(--md-on-surface)">取消</button>
+            <button class="btn-filled" id="fabImportBtn">
+                <span class="material-symbols-outlined" style="font-size:18px;">cloud_download</span> 直接入库
+            </button>
+            <button class="btn-filled" id="fabPlaylistBtn" style="background:var(--md-secondary);color:var(--md-on-secondary)">
+                <span class="material-symbols-outlined" style="font-size:18px;">playlist_add</span> 建歌单
+            </button>
+        </div>
+    </div>
+
     <!-- Snackbar -->
     <div id="snackbar" class="snackbar"></div>
+
+    <!-- Progress Dialog -->
+    <div id="progressDialog" class="dialog-overlay">
+        <div class="dialog" style="max-width: 320px;text-align:center;">
+            <div class="dialog-title" id="progressTitle">正在处理</div>
+            <div class="dialog-content" style="padding:24px 0;">
+                <div class="spinner"></div>
+                <div id="progressText" style="margin-top:16px;color:var(--md-on-surface-variant);font-size:14px;">请稍候...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Playlist Dialog -->
+    <div id="playlistDialog" class="dialog-overlay">
+        <div class="dialog" style="max-width: 320px;">
+            <div class="dialog-title">创建新歌单</div>
+            <div class="dialog-content">
+                <div class="form-group">
+                    <label class="form-label">歌单名称</label>
+                    <input type="text" class="text-field" id="playlistName" placeholder="例如：WebDAV精选">
+                </div>
+            </div>
+            <div class="dialog-actions">
+                <button class="btn-text" id="cancelPlaylistBtn">取消</button>
+                <button class="btn-filled" id="confirmPlaylistBtn">确认</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="static/js/app.js"></script>
 </body>

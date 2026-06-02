@@ -1,7 +1,7 @@
 import { createRouter, jsonResponse, createSearchHandler, createMusicUrlHandler } from '@songloft/plugin-sdk'
 import type { HTTPRequest } from '@songloft/plugin-sdk'
 import { getConfigs, saveConfigs, getConfig, DavConfig } from './config'
-import { propfind } from './client'
+import { propfind, buildStreamUrl } from './client'
 
 function parseBody(req: HTTPRequest): any {
   if (!req.body) return {}
@@ -85,10 +85,11 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
     })
     
     return jsonResponse(filteredItems.map(item => ({
-      basename: item.basename,
+      id: item.filename,
+      name: item.basename,
       type: item.type,
       size: item.size,
-      lastmod: item.lastmod
+      streamUrl: item.type === 'file' ? buildStreamUrl(config, item.filename) : ''
     })))
   } catch (e) {
     return jsonResponse({ error: String(e) }, 500)
@@ -112,15 +113,23 @@ router.post('/api/music/url', createMusicUrlHandler({
     const config = await getConfig(configName)
     if (!config) throw new Error('WebDAV config not found: ' + configName)
     
-    // 构建直链，将账号密码放入 url 以供前端播放
-    const urlObj = new URL(config.url)
-    if (config.username && config.password) {
-      urlObj.username = config.username
-      urlObj.password = config.password
-    }
-    const fullPath = urlObj.toString().replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path)
-    return fullPath
+    return buildStreamUrl(config, path)
   }
 }))
+
+// 新增前端 API - 扁平化搜索 (WebDAV 不支持)
+router.get('/lists/:id/search', async () => {
+  return jsonResponse([])
+})
+
+// 新增前端 API - 我的收藏 (WebDAV 无此概念)
+router.get('/lists/:id/starred', async () => {
+  return jsonResponse([])
+})
+
+// 新增前端 API - 随机听听 (WebDAV 不支持)
+router.get('/lists/:id/random', async () => {
+  return jsonResponse([])
+})
 
 export default router
