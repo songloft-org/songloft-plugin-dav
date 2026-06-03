@@ -30,19 +30,19 @@ export interface DavItem {
 }
 
 function extractTag(xml: string, tag: string): string {
-  const reg = new RegExp(`<([^:>]+:)?${tag}[^>]*>([\\s\\S]*?)</\\1?${tag}>`, 'i')
+  const reg = new RegExp(`<(?:[^:>]+:)?${tag}[^>]*>([\\s\\S]*?)</(?:[^:>]+:)?${tag}>`, 'i')
   const match = xml.match(reg)
-  return match ? match[2] : ''
+  return match ? match[1] : ''
 }
 
 function extractAllTags(xml: string, tag: string): string[] {
   // Regex to match opening and closing tags, taking namespace into account optionally.
   // We use a global match and loop to get the content.
   const results: string[] = []
-  const reg = new RegExp(`<([^:>]+:)?${tag}[^>]*>([\\s\\S]*?)</\\1?${tag}>`, 'gi')
+  const reg = new RegExp(`<(?:[^:>]+:)?${tag}[^>]*>([\\s\\S]*?)</(?:[^:>]+:)?${tag}>`, 'gi')
   let match
   while ((match = reg.exec(xml)) !== null) {
-    results.push(match[2])
+    results.push(match[1])
   }
   return results
 }
@@ -94,11 +94,19 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
 }
 
 export function buildStreamUrl(config: DavConfig, path: string): string {
-  const urlObj = new URL(config.url)
+  let urlObj: URL
+  try {
+    urlObj = new URL(path)
+  } catch {
+    urlObj = new URL(config.url)
+    const encodedPath = path.split('/').map(s => encodeURIComponent(s)).join('/')
+    urlObj.pathname = (urlObj.pathname.replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)).replace(/\/+/g, '/')
+  }
+  
   if (config.username && config.password) {
     urlObj.username = config.username
     urlObj.password = config.password
   }
-  const encodedPath = path.split('/').map(s => encodeURIComponent(s)).join('/')
-  return urlObj.toString().replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)
+  
+  return urlObj.toString()
 }

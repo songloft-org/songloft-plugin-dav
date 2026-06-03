@@ -76,12 +76,21 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
   try {
     const items = await propfind(config, dirPath)
     
-    // 过滤掉当前目录 (.)
+    // 过滤掉当前目录本身
+    const configUrlObj = new URL(config.url)
+    const configUrlPath = decodeURIComponent(configUrlObj.pathname).replace(/\/$/, '')
+    const reqPath = dirPath === '/' ? '' : dirPath.replace(/\/$/, '')
+    const expectedPathname = configUrlPath + reqPath
+
     const filteredItems = items.filter(i => {
-      // PROPFIND 会返回自身目录，需要将其排除
-      const reqPath = dirPath === '/' ? '/' : dirPath.replace(/\/$/, '')
-      const itemPath = i.filename.replace(/\/$/, '')
-      return itemPath !== reqPath && !itemPath.endsWith(reqPath)
+      let itemPathname = ''
+      try {
+        itemPathname = new URL(i.filename).pathname
+      } catch {
+        itemPathname = i.filename
+      }
+      itemPathname = decodeURIComponent(itemPathname).replace(/\/$/, '')
+      return itemPathname !== expectedPathname
     })
     
     return jsonResponse(filteredItems.map(item => ({
