@@ -83,11 +83,11 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
     const expectedPathname = configUrlPath + reqPath
 
     const filteredItems = items.filter(i => {
-      let itemPathname = ''
-      try {
-        itemPathname = new URL(i.filename).pathname
-      } catch {
-        itemPathname = i.filename
+      let itemPathname = i.filename
+      if (itemPathname.startsWith('http')) {
+        try {
+          itemPathname = new URL(itemPathname).pathname
+        } catch {}
       }
       itemPathname = decodeURIComponent(itemPathname).replace(/\/$/, '')
       return itemPathname !== expectedPathname
