@@ -146,23 +146,29 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
 }
 
 export function buildStreamUrl(config: DavConfig, path: string): string {
-  let urlObj: URL
+  // Build the raw URL string without relying on URL object mutation
+  // (the JS polyfill in quickjs does not update href when setting pathname/username/password)
+  let rawUrl: string
   if (path.startsWith('http')) {
-    try {
-      urlObj = new URL(path)
-    } catch {
-      urlObj = new URL(config.url)
-    }
+    rawUrl = path
   } else {
-    urlObj = new URL(config.url)
-    const encodedPath = path.split('/').map(s => encodeURIComponent(s)).join('/')
-    urlObj.pathname = (urlObj.pathname.replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)).replace(/\/+/g, '/')
+    const base = config.url.replace(/\/$/, '')
+    const encodedPath = path.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
+    const normalizedPath = encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath
+    rawUrl = (base + normalizedPath).replace(/([^:])\/\/+/g, '$1/')
   }
-  
+
   if (config.username && config.password) {
-    urlObj.username = config.username
-    urlObj.password = config.password
+    // Inject credentials as http://user:pass@host/path
+    const protoMatch = rawUrl.match(/^(https?:\/\/)(.*)$/)
+    if (protoMatch) {
+      const encodedUser = encodeURIComponent(config.username)
+      const encodedPass = encodeURIComponent(config.password)
+      // Strip any existing userinfo from the captured host+path part
+      const rest = protoMatch[2].replace(/^[^@]*@/, '')
+      rawUrl = protoMatch[1] + encodedUser + ':' + encodedPass + '@' + rest
+    }
   }
-  
-  return urlObj.toString()
+
+  return rawUrl
 }
