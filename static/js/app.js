@@ -37,15 +37,8 @@ function switchTab(tabId) {
 // API 调用
 function getAuthHeaders() {
     const headers = { 'Content-Type': 'application/json' };
-    try {
-        const authData = localStorage.getItem('songloft-auth');
-        if (authData) {
-            const auth = JSON.parse(authData);
-            if (auth.accessToken) {
-                headers['Authorization'] = 'Bearer ' + auth.accessToken;
-            }
-        }
-    } catch (e) {}
+    const token = SongloftPlugin.getAuthToken();
+    if (token) headers['Authorization'] = 'Bearer ' + token;
     return headers;
 }
 

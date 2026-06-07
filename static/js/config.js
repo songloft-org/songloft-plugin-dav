@@ -3,7 +3,7 @@
  * 负责主程序地址等配置的加载和保存
  */
 
-import { apiGet, apiPost, apiDelete } from './common.js';
+const { apiGet, apiPost, apiDelete } = SongloftPlugin;
 import { showSnackbar } from './utils.js';
 
 // 对话记录轮询定时器
