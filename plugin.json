@@ -16,7 +16,8 @@
     "playlists.read",
     "playlists.write"
   ],
-  "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-dav/main/manifest.json",
+  "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-dav/main/plugin.json",
+  "download_url": "https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.0.3/dav.jsplugin.zip",
   "entryHash": "",
   "zipHash": ""
 }
