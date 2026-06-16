@@ -146,14 +146,25 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
 }
 
 export function buildStreamUrl(config: DavConfig, path: string): string {
-  // Build the raw URL string without relying on URL object mutation
-  // (the JS polyfill in quickjs does not update href when setting pathname/username/password)
   let rawUrl: string
   if (path.startsWith('http')) {
     rawUrl = path
   } else {
     const base = config.url.replace(/\/$/, '')
-    const encodedPath = path.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
+
+    // PROPFIND href 是服务器根路径开始的绝对路径（如 /dav/music/song.mp3），
+    // 已包含 DAV 挂载前缀；config.url 也包含该前缀，需去重避免 /dav/dav/...
+    let relativePath = path
+    try {
+      const configPathname = new URL(base).pathname.replace(/\/$/, '')
+      if (configPathname && configPathname !== '/' && relativePath.startsWith(configPathname + '/')) {
+        relativePath = relativePath.substring(configPathname.length)
+      }
+    } catch {
+      // URL 解析失败，使用原始路径
+    }
+
+    const encodedPath = relativePath.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
     const normalizedPath = encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath
     rawUrl = (base + normalizedPath).replace(/([^:])\/\/+/g, '$1/')
   }
