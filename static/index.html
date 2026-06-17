@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>WebDAV 音乐源</title>
     <link rel="stylesheet" href="static/css/style.css">
 
@@ -76,7 +76,7 @@
             <div class="card">
                 <div class="card-body" style="display:flex;gap:12px;align-items:center;">
                     <span class="material-symbols-outlined" style="color:var(--md-primary)">storage</span>
-                    <select id="browserServerSelect" class="text-field" style="flex:1">
+                    <select id="browserServerSelect" class="text-field" style="flex:1" aria-label="选择服务器">
                         <option value="">请选择服务器...</option>
                     </select>
                 </div>
@@ -103,12 +103,12 @@
     </div>
 
     <!-- Tab Bar -->
-    <nav class="tab-bar">
-        <button class="tab-item active" data-tab="servers">
+    <nav class="tab-bar" role="tablist">
+        <button class="tab-item active" data-tab="servers" role="tab">
             <span class="material-symbols-outlined">dns</span>
             <span>服务器管理</span>
         </button>
-        <button class="tab-item" data-tab="browser">
+        <button class="tab-item" data-tab="browser" role="tab">
             <span class="material-symbols-outlined">folder</span>
             <span>文件浏览</span>
         </button>
@@ -132,7 +132,7 @@
     <div id="snackbar" class="snackbar"></div>
 
     <!-- Progress Dialog -->
-    <div id="progressDialog" class="dialog-overlay">
+    <div id="progressDialog" class="dialog-overlay" role="dialog" aria-modal="true">
         <div class="dialog" style="max-width: 320px;text-align:center;">
             <div class="dialog-title" id="progressTitle">正在处理</div>
             <div class="dialog-content" style="padding:24px 0;">
@@ -143,13 +143,13 @@
     </div>
 
     <!-- New Playlist Dialog -->
-    <div id="playlistDialog" class="dialog-overlay">
+    <div id="playlistDialog" class="dialog-overlay" role="dialog" aria-modal="true">
         <div class="dialog" style="max-width: 320px;">
             <div class="dialog-title">创建新歌单</div>
             <div class="dialog-content">
                 <div class="form-group">
-                    <label class="form-label">歌单名称</label>
-                    <input type="text" class="text-field" id="playlistName" placeholder="例如：WebDAV精选">
+                    <label class="form-label" for="playlistName">歌单名称</label>
+                    <input type="text" class="text-field" id="playlistName" placeholder="例如：WebDAV精选" aria-label="歌单名称">
                 </div>
             </div>
             <div class="dialog-actions">
