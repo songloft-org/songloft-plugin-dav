@@ -105,6 +105,68 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
   }
 })
 
+// 封面代理 — 后端 GetSongCover 通过 InternalURLResolver 解析相对 URL 后请求此端点
+router.get('/api/cover', async (req: HTTPRequest) => {
+  let configName = ''
+  let path = ''
+  if (req.query) {
+    const cm = req.query.match(/(?:^|&)configName=([^&]*)/)
+    if (cm) configName = decodeURIComponent(cm[1])
+    const pm = req.query.match(/(?:^|&)path=([^&]*)/)
+    if (pm) path = decodeURIComponent(pm[1])
+  }
+  if (!configName || !path) {
+    return jsonResponse({ error: 'Missing configName or path' }, 400)
+  }
+  const config = await getConfig(configName)
+  if (!config) {
+    return jsonResponse({ error: 'Config not found' }, 404)
+  }
+  const streamUrl = buildStreamUrl(config, path)
+  try {
+    const resp = await fetch(streamUrl)
+    if (!resp.ok) {
+      return { statusCode: resp.status, headers: {}, body: `Cover fetch failed: ${resp.status}` }
+    }
+    const ct = resp.headers.get('content-type') || 'image/jpeg'
+    const buf = await resp.arrayBuffer()
+    return { statusCode: 200, headers: { 'Content-Type': ct }, body: new Uint8Array(buf) }
+  } catch (e) {
+    return jsonResponse({ error: String(e) }, 502)
+  }
+})
+
+// 歌词代理 — 后端 LyricFetcher 通过 InternalURLResolver 解析相对 URL 后请求此端点
+// 返回格式须符合 LyricFetcher 期望: {"code":0,"data":{"lyric":"...","tlyric":"","rlyric":"","lxlyric":""}}
+router.get('/api/lyric', async (req: HTTPRequest) => {
+  let configName = ''
+  let path = ''
+  if (req.query) {
+    const cm = req.query.match(/(?:^|&)configName=([^&]*)/)
+    if (cm) configName = decodeURIComponent(cm[1])
+    const pm = req.query.match(/(?:^|&)path=([^&]*)/)
+    if (pm) path = decodeURIComponent(pm[1])
+  }
+  if (!configName || !path) {
+    return jsonResponse({ code: -1, data: {}, message: 'Missing configName or path' })
+  }
+  const config = await getConfig(configName)
+  if (!config) {
+    return jsonResponse({ code: -1, data: {}, message: 'Config not found' })
+  }
+  const streamUrl = buildStreamUrl(config, path)
+  try {
+    const resp = await fetch(streamUrl)
+    if (!resp.ok) {
+      return jsonResponse({ code: -1, data: {}, message: `Lyric fetch failed: ${resp.status}` })
+    }
+    const text = await resp.text()
+    return jsonResponse({ code: 0, data: { lyric: text, tlyric: '', rlyric: '', lxlyric: '' } })
+  } catch (e) {
+    return jsonResponse({ code: -1, data: {}, message: String(e) })
+  }
+})
+
 // 全局搜索 - WebDAV 无法提供全局检索，返回空
 router.post('/api/search', createSearchHandler({
   search: async () => {
