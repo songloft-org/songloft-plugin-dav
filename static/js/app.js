@@ -336,7 +336,7 @@ async function submitImport(itemsToImport) {
     if (!serverName) return null
     
     const reqs = itemsToImport.map(item => ({
-        title: item.name,
+        title: item.name.replace(/\.[^.]+$/, ''),
         artist: '未知歌手',
         album: '',
         cover_url: '',
