@@ -1,6 +1,6 @@
 {
   "name": "dav",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "通过 WebDAV 协议接入外部音乐库",
   "private": true,
   "scripts": {
