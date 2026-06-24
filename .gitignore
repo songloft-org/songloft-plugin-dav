@@ -1,2 +1,4 @@
 ﻿node_modules/
 dist/
+.songloft-dev.json
+package-lock.json

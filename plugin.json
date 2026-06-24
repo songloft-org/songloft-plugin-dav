@@ -6,6 +6,7 @@
   "author": "Songloft Team",
   "homepage": "https://github.com/songloft-org/songloft-plugin-dav",
   "license": "Apache-2.0",
+  "icon": "icon.svg",
   "entryPath": "dav",
   "main": "main.js",
   "minHostVersion": "1.3.0",
