@@ -99,8 +99,26 @@ function extractAllTags(xml: string, tag: string): string[] {
   return results
 }
 
+function decodeXmlEntities(str: string): string {
+  return str.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g,
+    (match: string, dec: string, hex: string, name: string) => {
+      if (dec) return String.fromCharCode(parseInt(dec, 10))
+      if (hex) return String.fromCharCode(parseInt(hex, 16))
+      switch (name) {
+        case 'amp': return '&'
+        case 'lt': return '<'
+        case 'gt': return '>'
+        case 'quot': return '"'
+        case 'apos': return "'"
+        default: return match
+      }
+    }
+  )
+}
+
 export async function propfind(config: DavConfig, path: string): Promise<DavItem[]> {
-  const url = config.url.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path)
+  const encodedPath = path.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
+  const url = config.url.replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)
   const headers = getAuthHeader(config)
   const reqUrl = url.replace(/([^:])\/\//g, '$1/')
   
@@ -120,7 +138,7 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
   const responses = extractAllTags(xmlText, 'response')
   
   return responses.map((r: string) => {
-    const href = extractTag(r, 'href')
+    const href = decodeXmlEntities(extractTag(r, 'href'))
     const decodedHref = decodeURIComponent(href)
     let basename = decodedHref.split('/').filter(Boolean).pop() || ''
     
@@ -132,7 +150,7 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
     const resourcetype = extractTag(prop, 'resourcetype')
     const isCollection = /<([^:>]+:)?collection/i.test(resourcetype)
     
-    const lastmod = extractTag(prop, 'getlastmodified')
+    const lastmod = decodeXmlEntities(extractTag(prop, 'getlastmodified'))
     const contentLength = extractTag(prop, 'getcontentlength')
     
     return {

@@ -1406,6 +1406,29 @@
     opacity: 0.8;
 }
 
+/* FAB Container */
+.fab-container {
+    position: fixed;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    z-index: 98;
+    background: var(--md-surface);
+    border-top: 1px solid var(--md-outline-variant);
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    padding: 12px 20px;
+    transform: translateY(100%);
+    opacity: 0;
+    transition: transform .3s ease, opacity .3s ease;
+    pointer-events: none;
+}
+
+.fab-container.show {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
 /* ============================================ */
 /* Responsive Styles */
 /* ============================================ */
@@ -1438,6 +1461,15 @@
 
     .playback-controls .btn-icon .material-symbols-outlined {
         font-size: 24px;
+    }
+
+    .fab-container {
+        padding: 12px 16px;
+    }
+
+    .fab-container > div {
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
     .dialog {
@@ -1830,6 +1862,12 @@
         margin: 0 auto;
     }
 
+    /* FAB — offset for side nav */
+    .fab-container {
+        left: 80px;
+        bottom: 0;
+    }
+
     /* Snackbar — offset for side nav */
     .snackbar {
         left: calc(50% + 40px);
@@ -1865,6 +1903,10 @@
     }
 
     /* Adjust all left offsets to 100px */
+    .fab-container {
+        left: 100px;
+    }
+
     .app-bar {
         left: 100px;
     }
@@ -2704,6 +2746,10 @@ html.embed .snackbar {
     bottom: 24px !important;
 }
 html.embed .player-bar {
+    left: 0 !important;
+    bottom: 0 !important;
+}
+html.embed .fab-container {
     left: 0 !important;
     bottom: 0 !important;
 }
