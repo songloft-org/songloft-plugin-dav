@@ -142,12 +142,18 @@
         </div>
     </div>
 
-    <!-- New Playlist Dialog -->
+    <!-- Playlist Import Dialog -->
     <div id="playlistDialog" class="dialog-overlay" role="dialog" aria-modal="true">
         <div class="dialog" style="max-width: 320px;">
-            <div class="dialog-title">创建新歌单</div>
+            <div class="dialog-title">导入到歌单</div>
             <div class="dialog-content">
                 <div class="form-group">
+                    <label class="form-label" for="playlistTarget">目标歌单</label>
+                    <select class="text-field" id="playlistTarget" aria-label="目标歌单" disabled>
+                        <option value="__new__">新建歌单</option>
+                    </select>
+                </div>
+                <div class="form-group" id="playlistNameGroup">
                     <label class="form-label" for="playlistName">歌单名称</label>
                     <input type="text" class="text-field" id="playlistName" placeholder="例如：WebDAV精选" aria-label="歌单名称">
                 </div>

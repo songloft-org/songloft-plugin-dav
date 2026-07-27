@@ -3,6 +3,7 @@ let currentPath = '/'
 let isSelectMode = false
 let selectedItems = new Map()
 let currentListItems = []
+const NEW_PLAYLIST_VALUE = '__new__'
 
 // UI 工具函数
 function showSnackbar(message) {
@@ -362,6 +363,60 @@ async function submitImport(itemsToImport) {
     }
 }
 
+function updatePlaylistTargetState() {
+    const target = document.getElementById('playlistTarget')
+    const nameGroup = document.getElementById('playlistNameGroup')
+    const nameInput = document.getElementById('playlistName')
+    const isNewPlaylist = !target || target.value === NEW_PLAYLIST_VALUE
+    nameGroup.style.display = isNewPlaylist ? '' : 'none'
+    nameInput.disabled = !isNewPlaylist
+}
+
+async function loadPlaylistTargets() {
+    const target = document.getElementById('playlistTarget')
+    target.disabled = true
+    target.innerHTML = '<option value="__new__">正在加载已有歌单...</option>'
+
+    try {
+        const playlists = []
+        const limit = 100
+        let offset = 0
+        let total = 0
+
+        do {
+            const res = await fetch(window.location.origin + `/api/v1/playlists?type=normal&limit=${limit}&offset=${offset}`, {
+                headers: getAuthHeaders()
+            })
+            if (!res.ok) throw new Error(await res.text())
+            const data = await res.json()
+            const page = Array.isArray(data.playlists) ? data.playlists : []
+            playlists.push(...page)
+            total = Number(data.total) || 0
+            offset += page.length
+            if (page.length === 0) break
+        } while (offset < total)
+
+        target.innerHTML = ''
+        const newOption = document.createElement('option')
+        newOption.value = NEW_PLAYLIST_VALUE
+        newOption.textContent = '新建歌单'
+        target.appendChild(newOption)
+        playlists.forEach(playlist => {
+            const option = document.createElement('option')
+            option.value = String(playlist.id)
+            option.textContent = `${playlist.name} (${playlist.song_count || 0} 首歌曲)`
+            target.appendChild(option)
+        })
+    } catch (e) {
+        target.innerHTML = `<option value="${NEW_PLAYLIST_VALUE}">新建歌单</option>`
+        showSnackbar('获取已有歌单失败: ' + e.message)
+    } finally {
+        target.disabled = false
+        target.value = NEW_PLAYLIST_VALUE
+        updatePlaylistTargetState()
+    }
+}
+
 window._importSingle = async function(id) {
     const item = currentListItems.find(i => i.id === id)
     if (!item) return
@@ -434,10 +489,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fabPlaylistBtn = document.getElementById('fabPlaylistBtn')
     if (fabPlaylistBtn) {
-        fabPlaylistBtn.onclick = () => {
+        fabPlaylistBtn.onclick = async () => {
             if (selectedItems.size === 0) return
             document.getElementById('playlistName').value = ''
             document.getElementById('playlistDialog').classList.add('show')
+            await loadPlaylistTargets()
         }
     }
 
@@ -447,25 +503,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmPlaylistBtn = document.getElementById('confirmPlaylistBtn')
     if (confirmPlaylistBtn) {
         confirmPlaylistBtn.onclick = async () => {
+            const target = document.getElementById('playlistTarget')
             const name = document.getElementById('playlistName').value.trim()
-            if (!name) { showSnackbar('请输入歌单名称'); return }
+            const isNewPlaylist = target.value === NEW_PLAYLIST_VALUE
+            if (isNewPlaylist && !name) { showSnackbar('请输入歌单名称'); return }
             document.getElementById('playlistDialog').classList.remove('show')
             
-            showProgress(true, '创建歌单', `正在导入歌曲并创建歌单...`)
+            showProgress(true, isNewPlaylist ? '创建歌单' : '添加到歌单', isNewPlaylist ? '正在导入歌曲并创建歌单...' : '正在导入歌曲并添加到歌单...')
             try {
                 const songs = await submitImport(Array.from(selectedItems.values()))
                 const songIds = songs.map(s => s.id)
-                
-                const playlistRes = await fetch(window.location.origin + '/api/v1/playlists', {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({ name: name, description: 'Imported from WebDAV', type: 'normal' })
-                })
-                if (!playlistRes.ok) throw new Error('创建歌单失败')
-                const playlist = await playlistRes.json()
+                let playlistId = target.value
+
+                if (isNewPlaylist) {
+                    const playlistRes = await fetch(window.location.origin + '/api/v1/playlists', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({ name: name, description: 'Imported from WebDAV', type: 'normal' })
+                    })
+                    if (!playlistRes.ok) throw new Error('创建歌单失败')
+                    const playlist = await playlistRes.json()
+                    playlistId = playlist.id
+                }
                 
                 if (songIds.length > 0) {
-                    const addRes = await fetch(window.location.origin + `/api/v1/playlists/${playlist.id}/songs`, {
+                    const addRes = await fetch(window.location.origin + `/api/v1/playlists/${playlistId}/songs`, {
                         method: 'POST',
                         headers: getAuthHeaders(),
                         body: JSON.stringify({ song_ids: songIds })
@@ -474,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 showProgress(false)
-                showSnackbar(`成功创建歌单并导入 ${songIds.length} 首歌曲`)
+                showSnackbar(isNewPlaylist ? `成功创建歌单并导入 ${songIds.length} 首歌曲` : `成功添加 ${songIds.length} 首歌曲到已有歌单`)
                 toggleSelectMode()
             } catch (e) {
                 showProgress(false)
@@ -482,6 +544,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+
+    const playlistTarget = document.getElementById('playlistTarget')
+    if (playlistTarget) playlistTarget.onchange = updatePlaylistTargetState
 
     fetchServers()
 })
