@@ -3,20 +3,20 @@ import { DavConfig } from './config'
 
 function getBasicAuth(str: string): string {
   try {
-    return globalThis.btoa(str)
+    const utf8 = encodeURIComponent(str).replace(
+      /%([0-9A-F]{2})/g,
+      (_match: string, hex: string) => String.fromCharCode(parseInt(hex, 16))
+    )
+    return globalThis.btoa(utf8)
   } catch {
     return ''
   }
 }
 
-function getAuthHeader(config: DavConfig): HeadersInit {
+function getAuthHeader(config: DavConfig): Record<string, string> {
   if (config.username && config.password) {
-    try {
-      const basic = getBasicAuth(`${config.username}:${config.password}`)
-      return { 'Authorization': `Basic ${basic}` }
-    } catch {
-      return {}
-    }
+    const basic = getBasicAuth(`${config.username}:${config.password}`)
+    if (basic) return { 'Authorization': `Basic ${basic}` }
   }
   return {}
 }
@@ -126,10 +126,14 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
     method: 'PROPFIND',
     headers: {
       ...headers,
-      'Depth': '1'
+      'Depth': '1',
+      'X-Fetch-No-Redirect': '1'
     }
   })
   
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error('WebDAV PROPFIND redirect rejected')
+  }
   if (!response.ok) {
     throw new Error(`WebDAV PROPFIND failed: ${response.status} ${response.statusText}`)
   }
@@ -163,41 +167,54 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
   })
 }
 
-export function buildStreamUrl(config: DavConfig, path: string): string {
-  let rawUrl: string
-  if (path.startsWith('http')) {
-    rawUrl = path
+export interface DavStreamRequest {
+  url: string
+  headers: Record<string, string>
+}
+
+export function buildStreamRequest(config: DavConfig, path: string): DavStreamRequest {
+  const baseUrl = new URL(config.url)
+  if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
+    throw new Error('Unsupported WebDAV URL protocol')
+  }
+  baseUrl.username = ''
+  baseUrl.password = ''
+  baseUrl.search = ''
+  baseUrl.hash = ''
+
+  let targetUrl: URL
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(path)) {
+    targetUrl = new URL(path)
   } else {
-    const base = config.url.replace(/\/$/, '')
-
-    // PROPFIND href 是服务器根路径开始的绝对路径（如 /dav/music/song.mp3），
-    // 已包含 DAV 挂载前缀；config.url 也包含该前缀，需去重避免 /dav/dav/...
+    const base = baseUrl.toString().replace(/\/$/, '')
+    const configPathname = decodeURIComponent(baseUrl.pathname).replace(/\/$/, '')
     let relativePath = path
-    try {
-      const configPathname = new URL(base).pathname.replace(/\/$/, '')
-      if (configPathname && configPathname !== '/' && relativePath.startsWith(configPathname + '/')) {
-        relativePath = relativePath.substring(configPathname.length)
-      }
-    } catch {
-      // URL 解析失败，使用原始路径
+    if (configPathname && configPathname !== '/' && relativePath.startsWith(configPathname + '/')) {
+      relativePath = relativePath.substring(configPathname.length)
     }
-
-    const encodedPath = relativePath.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
+    const encodedPath = relativePath
+      .split('/')
+      .map((segment: string) => segment ? encodeURIComponent(segment) : '')
+      .join('/')
     const normalizedPath = encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath
-    rawUrl = (base + normalizedPath).replace(/([^:])\/\/+/g, '$1/')
+    targetUrl = new URL(base + normalizedPath)
   }
 
-  if (config.username && config.password) {
-    // Inject credentials as http://user:pass@host/path
-    const protoMatch = rawUrl.match(/^(https?:\/\/)(.*)$/)
-    if (protoMatch) {
-      const encodedUser = encodeURIComponent(config.username)
-      const encodedPass = encodeURIComponent(config.password)
-      // Strip any existing userinfo from the captured host+path part
-      const rest = protoMatch[2].replace(/^[^@]*@/, '')
-      rawUrl = protoMatch[1] + encodedUser + ':' + encodedPass + '@' + rest
-    }
+  if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
+    throw new Error('Unsupported WebDAV resource protocol')
   }
+  if (targetUrl.origin !== baseUrl.origin) {
+    throw new Error('Cross-origin WebDAV resource rejected')
+  }
+  targetUrl.username = ''
+  targetUrl.password = ''
 
-  return rawUrl
+  return {
+    url: targetUrl.toString(),
+    headers: getAuthHeader(config)
+  }
+}
+
+export function buildStreamUrl(config: DavConfig, path: string): string {
+  return buildStreamRequest(config, path).url
 }

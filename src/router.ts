@@ -1,7 +1,7 @@
 import { createRouter, jsonResponse, createSearchHandler, createMusicUrlHandler } from '@songloft/plugin-sdk'
 import type { HTTPRequest } from '@songloft/plugin-sdk'
 import { getConfigs, saveConfigs, getConfig, DavConfig } from './config'
-import { propfind, buildStreamUrl } from './client'
+import { propfind, buildStreamRequest, buildStreamUrl } from './client'
 
 function parseBody(req: HTTPRequest): any {
   if (!req.body) return {}
@@ -93,13 +93,23 @@ router.get('/lists/:id/items', async (req: HTTPRequest, params) => {
       return itemPathname !== expectedPathname
     })
     
-    return jsonResponse(filteredItems.map(item => ({
-      id: item.filename,
-      name: item.basename,
-      type: item.type,
-      size: item.size,
-      streamUrl: item.type === 'file' ? buildStreamUrl(config, item.filename) : ''
-    })))
+    return jsonResponse(filteredItems.flatMap(item => {
+      let streamUrl = ''
+      if (item.type === 'file') {
+        try {
+          streamUrl = buildStreamUrl(config, item.filename)
+        } catch {
+          return []
+        }
+      }
+      return [{
+        id: item.filename,
+        name: item.basename,
+        type: item.type,
+        size: item.size,
+        streamUrl
+      }]
+    }))
   } catch (e) {
     return jsonResponse({ error: String(e) }, 500)
   }
@@ -122,9 +132,14 @@ router.get('/api/cover', async (req: HTTPRequest) => {
   if (!config) {
     return jsonResponse({ error: 'Config not found' }, 404)
   }
-  const streamUrl = buildStreamUrl(config, path)
   try {
-    const resp = await fetch(streamUrl)
+    const request = buildStreamRequest(config, path)
+    const resp = await fetch(request.url, {
+      headers: { ...request.headers, 'X-Fetch-No-Redirect': '1' }
+    })
+    if (resp.status >= 300 && resp.status < 400) {
+      return { statusCode: 502, headers: {}, body: 'Cross-origin cover redirect rejected' }
+    }
     if (!resp.ok) {
       return { statusCode: resp.status, headers: {}, body: `Cover fetch failed: ${resp.status}` }
     }
@@ -154,9 +169,14 @@ router.get('/api/lyric', async (req: HTTPRequest) => {
   if (!config) {
     return jsonResponse({ code: -1, data: {}, message: 'Config not found' })
   }
-  const streamUrl = buildStreamUrl(config, path)
   try {
-    const resp = await fetch(streamUrl)
+    const request = buildStreamRequest(config, path)
+    const resp = await fetch(request.url, {
+      headers: { ...request.headers, 'X-Fetch-No-Redirect': '1' }
+    })
+    if (resp.status >= 300 && resp.status < 400) {
+      return jsonResponse({ code: -1, data: {}, message: 'WebDAV lyric redirect rejected' })
+    }
     if (!resp.ok) {
       return jsonResponse({ code: -1, data: {}, message: `Lyric fetch failed: ${resp.status}` })
     }
@@ -184,7 +204,7 @@ router.post('/api/music/url', createMusicUrlHandler({
     const config = await getConfig(configName)
     if (!config) throw new Error('WebDAV config not found: ' + configName)
     
-    return buildStreamUrl(config, path)
+    return buildStreamRequest(config, path)
   }
 }))
 

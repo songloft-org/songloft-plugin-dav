@@ -27,6 +27,22 @@ function showProgress(show, title = '正在处理', text = '请稍候...') {
     }
 }
 
+function renderMessage(container, message, isError = false) {
+    const state = document.createElement('div')
+    state.className = 'empty-state'
+    if (isError) state.style.color = 'var(--md-error)'
+    state.textContent = message
+    container.replaceChildren(state)
+}
+
+function createIcon(name, color) {
+    const icon = document.createElement('span')
+    icon.className = 'material-symbols-outlined'
+    if (color) icon.style.color = color
+    icon.textContent = name
+    return icon
+}
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'))
     document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'))
@@ -148,25 +164,33 @@ async function deleteServer(name) {
 function renderServerList() {
     const container = document.getElementById('serverList')
     if (currentServers.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无服务器，请先添加</div>'
+        renderMessage(container, '暂无服务器，请先添加')
         return
     }
 
-    container.innerHTML = ''
+    container.replaceChildren()
     currentServers.forEach(server => {
         const item = document.createElement('div')
         item.style.cssText = 'display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--md-outline-variant)'
-        
-        item.innerHTML = `
-            <div style="flex:1">
-                <div style="font-size:16px;color:var(--md-on-surface);font-weight:500">${server.name}</div>
-                <div style="font-size:13px;color:var(--md-on-surface-variant);margin-top:4px">${server.url}</div>
-            </div>
-            <button class="btn-icon" style="color:var(--md-error)" title="删除">
-                <span class="material-symbols-outlined">delete</span>
-            </button>
-        `
-        item.querySelector('button').onclick = () => deleteServer(server.name)
+
+        const details = document.createElement('div')
+        details.style.flex = '1'
+        const name = document.createElement('div')
+        name.style.cssText = 'font-size:16px;color:var(--md-on-surface);font-weight:500'
+        name.textContent = server.name
+        const url = document.createElement('div')
+        url.style.cssText = 'font-size:13px;color:var(--md-on-surface-variant);margin-top:4px'
+        url.textContent = server.url
+        details.append(name, url)
+
+        const deleteButton = document.createElement('button')
+        deleteButton.className = 'btn-icon'
+        deleteButton.style.color = 'var(--md-error)'
+        deleteButton.title = '删除'
+        deleteButton.appendChild(createIcon('delete'))
+        deleteButton.addEventListener('click', () => deleteServer(server.name))
+
+        item.append(details, deleteButton)
         container.appendChild(item)
     })
 }
@@ -202,21 +226,26 @@ function renderItems(items, path) {
     document.getElementById('browserPathDisplay').textContent = path
     
     if (items.length === 0) {
-        container.innerHTML = '<div class="empty-state">空目录</div>'
+        renderMessage(container, '空目录')
         return
     }
     
-    container.innerHTML = ''
+    container.replaceChildren()
     
     if (isSelectMode) {
         const selectAllDiv = document.createElement('div')
         selectAllDiv.style.cssText = 'display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--md-outline-variant);cursor:pointer;gap:12px;'
         const allSelected = items.every(item => item.type !== 'directory' && selectedItems.has(item.id))
-        selectAllDiv.innerHTML = `
-            <input type="checkbox" class="checkbox-custom" ${allSelected ? 'checked' : ''} style="pointer-events:none">
-            <span style="font-weight:500;font-size:14px;color:var(--md-primary)">全选本页歌曲</span>
-        `
-        selectAllDiv.onclick = () => {
+        const checkbox = document.createElement('input')
+        checkbox.type = 'checkbox'
+        checkbox.className = 'checkbox-custom'
+        checkbox.checked = allSelected
+        checkbox.style.pointerEvents = 'none'
+        const label = document.createElement('span')
+        label.style.cssText = 'font-weight:500;font-size:14px;color:var(--md-primary)'
+        label.textContent = '全选本页歌曲'
+        selectAllDiv.append(checkbox, label)
+        selectAllDiv.addEventListener('click', () => {
             const willSelect = !allSelected
             items.forEach(item => {
                 if (item.type !== 'directory') {
@@ -226,7 +255,7 @@ function renderItems(items, path) {
             })
             renderItems(items, path)
             updateFAB()
-        }
+        })
         container.appendChild(selectAllDiv)
     }
 
@@ -238,29 +267,45 @@ function renderItems(items, path) {
         const isSelected = selectedItems.has(item.id)
         const icon = item.type === 'directory' ? 'folder' : 'audio_file'
         const color = item.type === 'directory' ? 'var(--md-primary)' : 'var(--md-on-surface)'
-        
-        let leadingHtml = ''
+
         if (isSelectMode && item.type !== 'directory') {
-            leadingHtml = `<input type="checkbox" class="checkbox-custom" ${isSelected ? 'checked' : ''} style="pointer-events:none;margin-right:12px;">`
+            const checkbox = document.createElement('input')
+            checkbox.type = 'checkbox'
+            checkbox.className = 'checkbox-custom'
+            checkbox.checked = isSelected
+            checkbox.style.cssText = 'pointer-events:none;margin-right:12px'
+            el.appendChild(checkbox)
         } else {
-            leadingHtml = `<span class="material-symbols-outlined" style="color:${color};margin-right:12px">${icon}</span>`
+            const leadingIcon = createIcon(icon, color)
+            leadingIcon.style.marginRight = '12px'
+            el.appendChild(leadingIcon)
         }
 
-        let trailingHtml = ''
+        const details = document.createElement('div')
+        details.style.cssText = 'flex:1;overflow:hidden'
+        const name = document.createElement('div')
+        name.style.cssText = 'font-size:14px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+        name.textContent = item.name
+        const subtitle = document.createElement('div')
+        subtitle.style.cssText = 'font-size:12px;color:var(--md-on-surface-variant);margin-top:2px'
+        subtitle.textContent = item.type === 'directory' ? '目录' : (item.size / 1024 / 1024).toFixed(2) + ' MB'
+        details.append(name, subtitle)
+        el.appendChild(details)
+
         if (item.type !== 'directory') {
-            trailingHtml = `<button class="btn-icon" title="导入此曲" style="color:var(--md-primary);" onclick="event.stopPropagation(); window._importSingle('${item.id}')"><span class="material-symbols-outlined">add_circle</span></button>`
+            const importButton = document.createElement('button')
+            importButton.className = 'btn-icon'
+            importButton.title = '导入此曲'
+            importButton.style.color = 'var(--md-primary)'
+            importButton.appendChild(createIcon('add_circle'))
+            importButton.addEventListener('click', event => {
+                event.stopPropagation()
+                window._importSingle(item.id)
+            })
+            el.appendChild(importButton)
         }
 
-        el.innerHTML = `
-            ${leadingHtml}
-            <div style="flex:1;overflow:hidden">
-                <div style="font-size:14px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
-                <div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:2px">${item.type === 'directory' ? '目录' : (item.size/1024/1024).toFixed(2)+' MB'}</div>
-            </div>
-            ${trailingHtml}
-        `
-        
-        el.onclick = () => {
+        el.addEventListener('click', () => {
             if (item.type === 'directory') {
                 const serverName = document.getElementById('browserServerSelect').value
                 const newPath = path.endsWith('/') ? path + item.name : path + '/' + item.name
@@ -275,7 +320,7 @@ function renderItems(items, path) {
                     showSnackbar('可以直接播放：' + item.name)
                 }
             }
-        }
+        })
         
         el.onmouseenter = () => el.style.backgroundColor = 'var(--md-surface-container-high)'
         el.onmouseleave = () => el.style.backgroundColor = 'transparent'
@@ -328,7 +373,7 @@ async function loadDirectory(serverName, path) {
         currentPath = path
         renderItems(items, path)
     } catch (e) {
-        container.innerHTML = `<div class="empty-state" style="color:var(--md-error)">加载失败: ${e}</div>`
+        renderMessage(container, '加载失败: ' + e, true)
     }
 }
 

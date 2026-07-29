@@ -6,6 +6,7 @@
   "scripts": {
     "build": "songloft-plugin build",
     "dev": "songloft-plugin dev",
+    "test": "node --test tests/*.test.mjs",
     "validate": "songloft-plugin validate",
     "publish:release": "songloft-plugin publish"
   },
