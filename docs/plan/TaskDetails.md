@@ -231,7 +231,7 @@
 ### Task R1: 恢复依赖锁定与发布可复现性
 
 **优先级**：🟡 P1
-**状态**：📋 规划中
+**状态**：🚧 进行中
 **估时**：0.5 天
 **依赖**：确定 npm 或 pnpm 为唯一包管理器
 
@@ -255,6 +255,15 @@
   - 从空 `node_modules` 执行冻结安装。
 - **Step 3: 验证**
   - 构建两次并比较规范化产物哈希。
+
+**阶段证据（2026-07-30，DAV v1.1.2 事故）**：
+- 已确认 v1.1.2 Release 的 `plugin.json.main` 为 `main.js`，且 `entryHash` 与 `main.js` 完全一致；错误来自宿主校验时优先读取同包内残留的 `main.jsc`。
+- 宿主改为严格按 `plugin.json.main` 读取、校验和执行入口，避免 manifest 与实际执行文件分叉。
+- Plugin Builder 在每次构建前清空 `_build`，JSC 失败回退时删除可能已写出的 `main.jsc` 半成品。
+- DAV v1.1.3 新增兼容构建层：先清理 `_build`，再对旧 Builder 产物移除未声明的同名入口并重算规范化 `zipHash`，因此不依赖 Builder 补丁先发布。
+- DAV 新增最终 ZIP 契约测试，校验 manifest 精确入口、单一入口文件、`entryHash` 与规范化 `zipHash`；Release workflow 在上传资产前执行该门禁。
+- 实际 v1.1.2 Release 在新门禁下稳定 RED（残留 `main.jsc`）；使用修复后 Builder 重建的 DAV 包稳定 GREEN，ZIP 仅含 `main.js`。
+- 待完成：分别提交并发布宿主、Plugin Builder 与 DAV v1.1.3；不得覆写既有 v1.1.2 资产。Subsonic 的双锁漂移仍作为 R1 剩余项处理。
 
 ---
 

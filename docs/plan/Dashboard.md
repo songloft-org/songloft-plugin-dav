@@ -12,8 +12,8 @@
 
 ## 1. 进度快照
 
-- **核心阶段**：高优先级安全边界已收敛，进入 P1 数据完整性治理
-- **当前瓶颈**：两插件依赖锁、版本与发布哈希尚未形成可重复发布基线
+- **核心阶段**：高优先级安全边界已收敛，正在治理 P1 发布可复现性
+- **当前瓶颈**：DAV 已具备兼容旧 Builder 的发布归一化与门禁；Plugin Builder 补丁、宿主修复及 Subsonic 锁文件仍需分别发布收尾
 - **首版目标**：安全边界、Subsonic 搜索分页及 MIoT 入库契约已修复；下一步恢复发布可复现性
 - **需求状态**：来源为 2026-07-29 对 `origin/main` 的代码审查；没有独立 PRD、交互原型或正式协议验收矩阵
 
@@ -37,7 +37,7 @@
 | **D1 — 阻断 DAV 跨主机凭据外送** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-d1) |
 | **S1 — 修复 Subsonic 搜索分页与聚合截断** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-s1) |
 | **S2 — 修复 Subsonic → MIoT 搜索结果入库契约** | 🟡 P1 | ✅ 已完成 | [TaskDetails.md](TaskDetails.md#task-s2) |
-| **R1 — 恢复依赖锁定与发布可复现性** | 🟡 P1 | 📋 规划中 | [TaskDetails.md](TaskDetails.md#task-r1) |
+| **R1 — 恢复依赖锁定与发布可复现性** | 🟡 P1 | 🚧 进行中 | [TaskDetails.md](TaskDetails.md#task-r1) |
 | **C1 — 协议兼容性与韧性收敛** | 🟢 P2 | 📋 远期 | [TaskDetails.md](TaskDetails.md#task-c1) |
 
 ---
@@ -64,6 +64,7 @@
 4. **D1 — 阻断 DAV 跨主机凭据外送**（✅ 完成*）：异源绝对 `href` 被拒绝，认证从 URL userinfo 迁移到 SDK header 契约，插件内代理禁止自动重定向。
 5. **S1 — 修复 Subsonic 搜索分页**（✅ 完成*）：SDK、宿主 bridge 和插件已传递真实 limit/offset，45 条匹配数据的三页回归无重复、无漏项。
 6. **S2 — 修复 Subsonic → MIoT 入库契约**（✅ 完成）：`topone` 改为插件解析型结果，不再返回或持久化 Subsonic 鉴权直链，并携带稳定去重键与歌词代理字段。
+7. **R1 — 修复 DAV 1.1.2 发布哈希不匹配**（🚧 进行中）：宿主严格读取 manifest 入口，Builder 清理脏目录和失败 JSC 半成品；DAV v1.1.3 构建会归一化旧 Builder 产物，并在上传前验证最终 ZIP。
 
 > 当前顺序：R1；C1 按兼容性收益分批进入。
 > \* W1 安全回归和构建已通过；DAV 源 manifest 的空哈希仍导致 `validate` 失败，属于既有 R1 发布基线缺口。
@@ -85,4 +86,4 @@
 
 ---
 
-*最后更新: 2026-07-30（S2 已完成并通过构建产物验证；下一任务 R1）*
+*最后更新: 2026-07-30（DAV 1.1.2 哈希事故已完成代码修复与产物门禁；R1 待发布链收尾）*

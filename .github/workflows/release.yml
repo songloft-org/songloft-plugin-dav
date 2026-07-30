@@ -36,7 +36,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Generated version: ${VERSION}"
 
-      - name: Update version in plugin.json / package.json
+      - name: Update version in manifests
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           node -e "
@@ -46,10 +46,17 @@ jobs:
               p.version = '${VERSION}';
               fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n');
             }
+            const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf-8'));
+            lock.version = '${VERSION}';
+            lock.packages[''].version = '${VERSION}';
+            fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
           "
 
       - name: Build
         run: npm run build
+
+      - name: Verify release package
+        run: npm test
 
       - name: Extract plugin info
         id: plugin_info
@@ -68,9 +75,10 @@ jobs:
           ZIP_NAME="${{ steps.plugin_info.outputs.zip_name }}"
           TAG="v${VERSION}"
 
-          # 删除已存在的同名 Release / Tag（重发版兼容）
+          # 已发布版本不可覆写，修复必须使用新的补丁版本。
           if gh release view "${TAG}" &>/dev/null; then
-            gh release delete "${TAG}" --yes --cleanup-tag
+            echo "::error::Release ${TAG} already exists; choose a new version."
+            exit 1
           fi
 
           gh release create "${TAG}" \
@@ -95,9 +103,13 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
             pkg.version = '${VERSION}';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf-8'));
+            lock.version = '${VERSION}';
+            lock.packages[''].version = '${VERSION}';
+            fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
           "
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add plugin.json package.json
+          git add plugin.json package.json package-lock.json
           git diff --staged --quiet || git commit -m "chore(release): bump to v${VERSION}"
           git push

@@ -10,7 +10,7 @@
 
 ## 📥 安装
 
-下载最新的 [v1.1.2 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.2/dav.jsplugin.zip)，然后在 Songloft 中安装。
+下载最新的 [v1.1.3 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.3/dav.jsplugin.zip)，然后在 Songloft 中安装。
 
 ## 📦 开发与构建
 
