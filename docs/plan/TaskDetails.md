@@ -87,7 +87,7 @@
 ### Task W1: 消除 DAV / Subsonic 前端 DOM XSS
 
 **优先级**：🟡 P1
-**状态**：✅ 已完成（DAV validate 存在既有 R1 缺口）
+**状态**：✅ 已完成
 **估时**：1 天
 **依赖**：S0
 
@@ -117,7 +117,7 @@
 - Regression RED/GREEN：DAV 与 Subsonic 各 3/3 场景从失败转为通过，覆盖动态 HTML 模板、内联事件和文本赋值约束。
 - Subsonic：语法检查、W1 回归、既有 P0 回归、build、validate 与差异检查全部通过；ReviewDiffHash `8ce877257ed6b5d429e445ab67c2b20c595fbbb0673219cca9517a3982938978`。
 - DAV：语法检查、W1 回归、build 与差异检查通过；ReviewDiffHash `d1d0e457f972af6c74b53cc9129f50d35a4fbfcb7c09d9c2059eed152cc15eb0`。
-- 已知边界：未连接真实 Songloft WebView 做视觉交互复核；DAV `validate` 仍因源 `plugin.json` 的 `entryHash` / `zipHash` 为空而失败，该问题不由 W1 引入，继续由 R1 处理。
+- 已知边界：未连接真实 Songloft WebView 做视觉交互复核；DAV 发布物现由 R1 的最终 ZIP 契约验证入口与双层哈希。
 
 <a id="task-d1"></a>
 ### Task D1: 阻断 DAV 跨主机凭据外送
@@ -154,7 +154,7 @@
 - Regression RED：修复前 5/5 场景失败，表现为异源地址被接受、凭据进入 URL、封面请求到达攻击者 origin。
 - Regression GREEN：最终 8/8 构建产物场景通过，新增覆盖目录异源项过滤及 PROPFIND/封面重定向。
 - Fresh verification：`npm run build`、`npm test`、专用 D1 回归和 `git diff --check` 通过；ReviewDiffHash `bdcf089619b89282153e3d9723940407661ab74680c188eca04f1c5e9bac21f4`，最终哈希一致。
-- 已知边界：宿主 SourceFetcher 消费 SDK headers 后的音频下载重定向由 Go HTTP client 控制；若要求对同域子域等场景也执行严格 origin 绑定，需要扩展宿主下载契约。DAV 既有 typecheck 与 manifest validate 失败继续由 R1 处理。
+- 已知边界：宿主 SourceFetcher 消费 SDK headers 后的音频下载重定向由 Go HTTP client 控制；若要求对同域子域等场景也执行严格 origin 绑定，需要扩展宿主下载契约。
 
 <a id="task-s1"></a>
 ### Task S1: 修复 Subsonic 搜索分页与聚合截断
@@ -231,7 +231,7 @@
 ### Task R1: 恢复依赖锁定与发布可复现性
 
 **优先级**：🟡 P1
-**状态**：🚧 进行中
+**状态**：✅ 已完成
 **估时**：0.5 天
 **依赖**：确定 npm 或 pnpm 为唯一包管理器
 
@@ -263,7 +263,10 @@
 - DAV v1.1.3 新增兼容构建层：先清理 `_build`，再对旧 Builder 产物移除未声明的同名入口并重算规范化 `zipHash`，因此不依赖 Builder 补丁先发布。
 - DAV 新增最终 ZIP 契约测试，校验 manifest 精确入口、单一入口文件、`entryHash` 与规范化 `zipHash`；Release workflow 在上传资产前执行该门禁。
 - 实际 v1.1.2 Release 在新门禁下稳定 RED（残留 `main.jsc`）；使用修复后 Builder 重建的 DAV 包稳定 GREEN，ZIP 仅含 `main.js`。
-- 待完成：分别提交并发布宿主、Plugin Builder 与 DAV v1.1.3；不得覆写既有 v1.1.2 资产。Subsonic 的双锁漂移仍作为 R1 剩余项处理。
+- Subsonic 选择 CI 已使用的 npm 作为唯一包管理器并删除漂移的 `pnpm-lock.yaml`；重建的 npm 锁将 SDK / Builder 固定到 `2.13.0`，版本统一为 v2.2.3。
+- Subsonic 构建会清理 `_build`、移除未声明 sibling、重算规范化 `zipHash`，并同步仓库 manifest 与 ZIP 内 `main/entryHash/zipHash`。
+- Regression GREEN：干净 `npm ci`、6/6 构建产物测试、TypeScript、build、validate 全部通过；最终 ZIP 仅含 `main.js`。
+- DAV 与 Subsonic Release workflow 均禁止覆写既有版本，并在创建 Release 前执行最终包门禁。R1 完成。
 
 ---
 
@@ -305,7 +308,7 @@ npm run build
 npm run validate
 ```
 
-目前两个项目尚未都提供 `npm test`，Subsonic 锁文件也未同步；V0 和 R1 负责让上述命令成为可信入口。
+两个项目现均提供 `npm test` 和最终 ZIP 契约验证；Subsonic 使用 npm 作为唯一锁来源。DAV 的发布物校验使用 `npm run build && npm test`，因为 Builder 的 `validate` 只检查源 manifest 字段格式，不读取最终 ZIP。
 
 ### 3.2 模块验收
 
@@ -336,4 +339,4 @@ npm run validate
 
 ---
 
-*最后更新: 2026-07-30（S2 入库契约已完成；下一任务 R1）*
+*最后更新: 2026-07-30（R1 发布可复现性已完成；下一任务 C1）*

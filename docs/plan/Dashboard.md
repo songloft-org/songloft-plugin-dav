@@ -12,9 +12,9 @@
 
 ## 1. 进度快照
 
-- **核心阶段**：高优先级安全边界已收敛，正在治理 P1 发布可复现性
-- **当前瓶颈**：DAV 已具备兼容旧 Builder 的发布归一化与门禁；Plugin Builder 补丁、宿主修复及 Subsonic 锁文件仍需分别发布收尾
-- **首版目标**：安全边界、Subsonic 搜索分页及 MIoT 入库契约已修复；下一步恢复发布可复现性
+- **核心阶段**：P0 / P1 已收敛，进入 P2 协议兼容性与韧性治理
+- **当前瓶颈**：C1 的 XML、专辑身份、认证编码、DAV 解析和网络韧性需要按独立 fixture 分批验证
+- **首版目标**：安全边界、搜索与入库契约、发布可复现性已修复；下一步收敛协议兼容性
 - **需求状态**：来源为 2026-07-29 对 `origin/main` 的代码审查；没有独立 PRD、交互原型或正式协议验收矩阵
 
 ---
@@ -37,7 +37,7 @@
 | **D1 — 阻断 DAV 跨主机凭据外送** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-d1) |
 | **S1 — 修复 Subsonic 搜索分页与聚合截断** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-s1) |
 | **S2 — 修复 Subsonic → MIoT 搜索结果入库契约** | 🟡 P1 | ✅ 已完成 | [TaskDetails.md](TaskDetails.md#task-s2) |
-| **R1 — 恢复依赖锁定与发布可复现性** | 🟡 P1 | 🚧 进行中 | [TaskDetails.md](TaskDetails.md#task-r1) |
+| **R1 — 恢复依赖锁定与发布可复现性** | 🟡 P1 | ✅ 已完成 | [TaskDetails.md](TaskDetails.md#task-r1) |
 | **C1 — 协议兼容性与韧性收敛** | 🟢 P2 | 📋 远期 | [TaskDetails.md](TaskDetails.md#task-c1) |
 
 ---
@@ -64,10 +64,10 @@
 4. **D1 — 阻断 DAV 跨主机凭据外送**（✅ 完成*）：异源绝对 `href` 被拒绝，认证从 URL userinfo 迁移到 SDK header 契约，插件内代理禁止自动重定向。
 5. **S1 — 修复 Subsonic 搜索分页**（✅ 完成*）：SDK、宿主 bridge 和插件已传递真实 limit/offset，45 条匹配数据的三页回归无重复、无漏项。
 6. **S2 — 修复 Subsonic → MIoT 入库契约**（✅ 完成）：`topone` 改为插件解析型结果，不再返回或持久化 Subsonic 鉴权直链，并携带稳定去重键与歌词代理字段。
-7. **R1 — 修复 DAV 1.1.2 发布哈希不匹配**（🚧 进行中）：宿主严格读取 manifest 入口，Builder 清理脏目录和失败 JSC 半成品；DAV v1.1.3 构建会归一化旧 Builder 产物，并在上传前验证最终 ZIP。
+7. **R1 — 恢复发布可复现性**（✅ 完成）：DAV 与 Subsonic 均使用 npm 冻结安装、单入口 ZIP 归一化和发布前哈希门禁；Subsonic 已删除漂移的 pnpm 锁，并同步 v2.2.3 版本、依赖与 registry manifest 哈希。
 
-> 当前顺序：R1；C1 按兼容性收益分批进入。
-> \* W1 安全回归和构建已通过；DAV 源 manifest 的空哈希仍导致 `validate` 失败，属于既有 R1 发布基线缺口。
+> 当前顺序：C1 按兼容性收益分批进入，先处理协议序列化与稳定专辑身份。
+> \* W1 安全回归和构建已通过；DAV 最终包由专用 ZIP 契约验证，避免把只检查源 manifest 的 `validate` 当作发布物校验。
 > \* D1 插件边界已修复；宿主 SourceFetcher 对音频下载重定向的严格 origin 绑定仍需宿主级契约支持。
 > \* S1 的 Subsonic 构建产物回归、SDK typecheck/build 已通过；当前环境缺少 Go 工具链，宿主 Go 回归待 CI 补跑。
 
@@ -86,4 +86,4 @@
 
 ---
 
-*最后更新: 2026-07-30（DAV 1.1.2 哈希事故已完成代码修复与产物门禁；R1 待发布链收尾）*
+*最后更新: 2026-07-30（R1 已完成；Subsonic v2.2.3 干净冻结安装、构建、测试与发布包校验通过）*
