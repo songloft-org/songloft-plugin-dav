@@ -197,7 +197,7 @@
 ### Task S2: 修复 Subsonic → MIoT 搜索结果入库契约
 
 **优先级**：🟡 P1
-**状态**：📋 规划中
+**状态**：✅ 已完成
 **估时**：0.5 天
 **依赖**：S0；MIoT 外部搜索结果契约
 
@@ -219,6 +219,13 @@
   - 返回插件入口、源数据、去重键和歌词信息。
 - **Step 3: 验证**
   - 修改 Subsonic 密码后，已入库歌曲仍通过插件重新解析，而非使用旧 URL。
+
+**实现与验证证据（2026-07-30）**：
+- 根因：`/api/search/topone` 返回带 Subsonic 鉴权参数的播放和封面 URL，却没有 `plugin_entry_path` 与 `dedup_key`；MIoT 因而按普通外链入库。
+- 实现：返回 `plugin_entry_path: "subsonic"`、稳定 `dedup_key` 和 `{ configName, songId }` 源数据，音频 `url` 留空并通过插件播放解析链路获取；歌词使用插件内部代理 URL，鉴权封面 URL 不再进入响应。
+- Regression RED：构建产物返回含鉴权参数的 `stream` URL，且缺少解析型音源字段。
+- Regression GREEN：响应不含固定密码标记，URL 为空，源数据、去重键和歌词代理字段完整。
+- Fresh verification：Subsonic 4/4 构建产物回归、`tsc --noEmit`、build、validate 与差异检查全部通过。
 
 <a id="task-r1"></a>
 ### Task R1: 恢复依赖锁定与发布可复现性
@@ -320,4 +327,4 @@ npm run validate
 
 ---
 
-*最后更新: 2026-07-30（S1 搜索分页已完成；下一任务 S2）*
+*最后更新: 2026-07-30（S2 入库契约已完成；下一任务 R1）*
