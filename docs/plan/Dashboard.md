@@ -13,8 +13,8 @@
 ## 1. 进度快照
 
 - **核心阶段**：高优先级安全边界已收敛，进入 P1 数据完整性治理
-- **当前瓶颈**：Subsonic `search3` 的 offset/count 仍受宿主固定 20 条搜索上限截断
-- **首版目标**：已阻断宿主凭据泄露、远端元数据注入和 DAV 异源 href 凭据外送；下一步恢复搜索与入库契约
+- **当前瓶颈**：Subsonic → MIoT 搜索结果仍会按普通外链入库并持久化鉴权 URL
+- **首版目标**：已阻断宿主凭据泄露、远端元数据注入和 DAV 异源 href 凭据外送，并恢复 Subsonic 搜索分页；下一步修复入库契约
 - **需求状态**：来源为 2026-07-29 对 `origin/main` 的代码审查；没有独立 PRD、交互原型或正式协议验收矩阵
 
 ---
@@ -35,7 +35,7 @@
 | **S0 — 阻断 Subsonic 封面接口永久 JWT 泄露** | 🔴 P0 | ✅ 已完成 | [TaskDetails.md](TaskDetails.md#task-s0) |
 | **W1 — 消除 DAV / Subsonic 前端 DOM XSS** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-w1) |
 | **D1 — 阻断 DAV 跨主机凭据外送** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-d1) |
-| **S1 — 修复 Subsonic 搜索分页与聚合截断** | 🟡 P1 | 📋 规划中 | [TaskDetails.md](TaskDetails.md#task-s1) |
+| **S1 — 修复 Subsonic 搜索分页与聚合截断** | 🟡 P1 | ✅ 已完成* | [TaskDetails.md](TaskDetails.md#task-s1) |
 | **S2 — 修复 Subsonic → MIoT 搜索结果入库契约** | 🟡 P1 | 📋 规划中 | [TaskDetails.md](TaskDetails.md#task-s2) |
 | **R1 — 恢复依赖锁定与发布可复现性** | 🟡 P1 | 📋 规划中 | [TaskDetails.md](TaskDetails.md#task-r1) |
 | **C1 — 协议兼容性与韧性收敛** | 🟢 P2 | 📋 远期 | [TaskDetails.md](TaskDetails.md#task-c1) |
@@ -62,11 +62,12 @@
 2. **S0 — 阻断永久 JWT 泄露**（✅ 完成）：封面改为插件服务端内部代理，客户端不再收到含 Token 的重定向。
 3. **W1 — 消除 DOM XSS**（✅ 完成*）：两插件远端元数据已迁移到 `textContent` 和结构化 DOM，动态按钮改用闭包事件。
 4. **D1 — 阻断 DAV 跨主机凭据外送**（✅ 完成*）：异源绝对 `href` 被拒绝，认证从 URL userinfo 迁移到 SDK header 契约，插件内代理禁止自动重定向。
-5. **S1 — 修复 Subsonic 搜索分页**（🟡 下一任务）：打通 SDK、宿主桥接和插件的真实 limit/offset。
+5. **S1 — 修复 Subsonic 搜索分页**（✅ 完成*）：SDK、宿主 bridge 和插件已传递真实 limit/offset，45 条匹配数据的三页回归无重复、无漏项。
 
-> 当前顺序：S1 → S2 → R1；C1 按兼容性收益分批进入。
+> 当前顺序：S2 → R1；C1 按兼容性收益分批进入。
 > \* W1 安全回归和构建已通过；DAV 源 manifest 的空哈希仍导致 `validate` 失败，属于既有 R1 发布基线缺口。
 > \* D1 插件边界已修复；宿主 SourceFetcher 对音频下载重定向的严格 origin 绑定仍需宿主级契约支持。
+> \* S1 的 Subsonic 构建产物回归、SDK typecheck/build 已通过；当前环境缺少 Go 工具链，宿主 Go 回归待 CI 补跑。
 
 ---
 
@@ -83,4 +84,4 @@
 
 ---
 
-*最后更新: 2026-07-29（W1 / D1 已完成并通过最终验证；下一任务 S1）*
+*最后更新: 2026-07-30（S1 已完成并通过跨仓库验证；下一任务 S2）*

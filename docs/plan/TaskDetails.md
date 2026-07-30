@@ -160,7 +160,7 @@
 ### Task S1: 修复 Subsonic 搜索分页与聚合截断
 
 **优先级**：🟡 P1
-**状态**：📋 规划中
+**状态**：✅ 已完成（宿主 Go 测试待 CI 补跑）
 **估时**：1 天
 **依赖**：V0；可能需要同步修改宿主与 Plugin SDK
 
@@ -184,6 +184,14 @@
   - SDK、桥接和插件共同传递 limit / offset。
 - **Step 3: 验证**
   - 使用至少 45 条匹配歌曲验证第 1、2、3 页无重复、无漏项。
+
+**实现与验证证据（2026-07-30）**：
+- 根因：宿主注入的 `songloft.songs.search` 包装器只序列化 `query`，虽然 Go bridge 已解析 `limit/offset`，但缺参时固定回退为 20；SDK 类型也不允许插件传分页 options。
+- 实现：宿主包装器和 SDK 增加可选 `{ limit, offset }`，保持旧单参数调用兼容；Subsonic `search2/search3` 对查询结果请求完整匹配集合，再分别执行歌曲、艺人和专辑分页。
+- Regression RED：构建产物观察到 `search` 的 options 为 `undefined`，`songOffset=20` 无法得到下一页。
+- Regression GREEN：45 条匹配歌曲按 20/20/5 分为三页，合并后 ID 1–45 无重复、无漏项；艺人和专辑聚合覆盖完整集合。
+- Fresh verification：Subsonic `npm test`、`tsc --noEmit`、`validate` 与差异检查通过；Plugin SDK typecheck、build 与差异检查通过。
+- 验证边界：当前环境没有 Go 工具链，宿主新增的 bridge 契约测试未能执行；源码契约检查已通过，仍需 CI 运行 `go test ./internal/jsplugin`。
 
 <a id="task-s2"></a>
 ### Task S2: 修复 Subsonic → MIoT 搜索结果入库契约
@@ -312,4 +320,4 @@ npm run validate
 
 ---
 
-*最后更新: 2026-07-29（首次建立风险治理执行计划，S0 进入开发）*
+*最后更新: 2026-07-30（S1 搜索分页已完成；下一任务 S2）*
