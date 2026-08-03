@@ -65,6 +65,15 @@ writeFileSync(
   await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }),
 )
 
+// The plugin store reads the repository manifest, while clients validate the
+// manifest embedded in the ZIP. Keep both declarations tied to this artifact.
+const registryManifestPath = join(cwd, 'plugin.json')
+const registryManifest = JSON.parse(readFileSync(registryManifestPath, 'utf8'))
+registryManifest.main = manifest.main
+registryManifest.entryHash = manifest.entryHash
+registryManifest.zipHash = manifest.zipHash
+writeFileSync(registryManifestPath, `${JSON.stringify(registryManifest, null, 2)}\n`)
+
 if (normalized) {
   console.log(`  🧹 removed undeclared sibling entry ${sibling}`)
 }

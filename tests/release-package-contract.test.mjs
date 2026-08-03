@@ -8,6 +8,7 @@ import JSZip from 'jszip'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const bundlePath = process.env.DAV_PLUGIN_ZIP || join(repoRoot, 'dist', 'dav.jsplugin.zip')
+const registryManifest = JSON.parse(readFileSync(join(repoRoot, 'plugin.json'), 'utf8'))
 
 function sha256(content) {
   return createHash('sha256').update(content).digest('hex')
@@ -24,6 +25,11 @@ test('release ZIP has one unambiguous entry and valid declared hashes', async ()
   const declaredEntry = zip.file(manifest.main)
 
   assert.ok(declaredEntry, `manifest main is missing: ${manifest.main}`)
+  assert.equal(
+    registryManifest.main,
+    manifest.main,
+    'registry plugin.json main must match the release ZIP',
+  )
   assert.equal(
     sha256(await declaredEntry.async('nodebuffer')),
     manifest.entryHash,
@@ -51,4 +57,19 @@ test('release ZIP has one unambiguous entry and valid declared hashes', async ()
     manifest.zipHash,
     'zipHash must match the canonical package contents',
   )
+
+  assert.equal(
+    registryManifest.entryHash,
+    manifest.entryHash,
+    'registry plugin.json entryHash must match the release ZIP',
+  )
+  assert.equal(
+    registryManifest.zipHash,
+    manifest.zipHash,
+    'registry plugin.json zipHash must match the release ZIP',
+  )
+})
+
+test('safe DAV credentials require a host that supports response headers', () => {
+  assert.equal(registryManifest.minHostVersion, '2.9.5')
 })

@@ -1,19 +1,12 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
+import { loadExecutablePluginBundle } from './helpers/load-plugin-bundle.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const bundlePath = join(repoRoot, 'dist', 'dav.jsplugin.zip')
-const pluginBundle = spawnSync('unzip', ['-p', bundlePath, 'main.js'], {
-  encoding: 'utf8',
-})
-
-if (pluginBundle.status !== 0 || !pluginBundle.stdout) {
-  throw new Error(`Failed to read main.js from build artifact: ${pluginBundle.stderr}`)
-}
+const pluginBundle = await loadExecutablePluginBundle(repoRoot)
 
 const config = {
   name: 'primary',
@@ -32,7 +25,7 @@ globalThis.songloft = {
   },
 }
 
-vm.runInThisContext(pluginBundle.stdout, { filename: 'dav-main.js' })
+vm.runInThisContext(pluginBundle, { filename: 'dav-main.js' })
 
 function musicUrlRequest(path) {
   return {
