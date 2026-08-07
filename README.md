@@ -10,27 +10,31 @@
 
 ## 📥 安装
 
-下载最新的 [v1.1.3 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.3/dav.jsplugin.zip)，然后在 Songloft 中安装。
+下载最新的 [v1.1.4 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.4/dav.jsplugin.zip)，然后在 Songloft 中安装。
 
-## 📦 开发与构建
+## 编程语言
+JavaScript, TypeScript
 
-基于 `songloft-plugin-sdk` 和 TypeScript 构建，运行在 QuickJS 沙盒中。
+## 构建系统
+npm / package.json
 
-```bash
-# 安装依赖
-pnpm install
+## 核心模块
+- `src/main.ts`: Songloft 生命周期与 HTTP 请求入口
+- `src/router.ts`: 配置、目录、封面、歌词、搜索与播放解析路由
+- `src/client.ts`: WebDAV PROPFIND、XML 解析、认证和流请求构造
+- `src/config.ts`: WebDAV 配置模型与 Songloft storage 持久化
+- `static/`: 独立配置、目录浏览和歌曲/歌单导入界面
+- `scripts/build.mjs`: 发布 ZIP 入口与哈希归一化
+- `tests/`: 凭据边界、DOM 安全、JSC 行为、版本与发布包契约回归
 
-# 本地调试与开发
-pnpm run dev
-
-# 构建生产环境插件包 (产物位于 dist/dav.jsplugin.zip)
-pnpm run build
-```
-
+## 使用说明
+- 安装: Unknown
+- 构建: npm run build
+- 运行: npm run dev
 ## ⚠️ 限制说明
 
 由于标准 WebDAV 协议不包含高效的全局递归搜索功能，为了避免给服务器造成灾难性的遍历压力，本插件在接入 Songloft 的**全局搜索**时会默认返回空结果。推荐的用法是直接浏览文件夹或将其中的特定目录添加到播放列表。
 
 ## 📄 License
 
-MIT
+Apache-2.0
