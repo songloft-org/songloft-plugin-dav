@@ -172,6 +172,15 @@ export interface DavStreamRequest {
   headers: Record<string, string>
 }
 
+export interface DavConnectionTestResult {
+  success: boolean
+  count?: number
+  readChecked?: boolean
+  stage?: 'list' | 'read'
+  error?: string
+  warning?: string
+}
+
 export function buildStreamRequest(config: DavConfig, path: string): DavStreamRequest {
   const baseUrl = new URL(config.url)
   if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
@@ -217,4 +226,138 @@ export function buildStreamRequest(config: DavConfig, path: string): DavStreamRe
 
 export function buildStreamUrl(config: DavConfig, path: string): string {
   return buildStreamRequest(config, path).url
+}
+
+const MAX_PROBE_DIRECTORIES = 6
+const MAX_PROBE_DEPTH = 3
+const MUSIC_FILE_EXTENSIONS = [
+  '.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.ape', '.wma', '.alac'
+]
+
+function normalizeResourceUrl(url: string): string {
+  return url.replace(/\/$/, '')
+}
+
+function joinDavPath(parent: string, child: string): string {
+  const normalizedParent = parent === '/' ? '' : parent.replace(/\/$/, '')
+  return `${normalizedParent}/${child}`
+}
+
+function isMusicFile(item: DavItem): boolean {
+  const name = item.basename.toLowerCase()
+  return item.type === 'file' && MUSIC_FILE_EXTENSIONS.some(ext => name.endsWith(ext))
+}
+
+function isInconclusiveRangeProbeError(error: unknown): boolean {
+  const message = String(error).toLowerCase()
+  return message.includes('response body exceeds limit') ||
+    message.includes('deadline exceeded') ||
+    message.includes('timed out') ||
+    message.includes('timeout')
+}
+
+async function findProbeFile(
+  config: DavConfig,
+  rootItems: DavItem[]
+): Promise<DavItem | undefined> {
+  const queue: Array<{ path: string; depth: number; items?: DavItem[] }> = [
+    { path: '/', depth: 0, items: rootItems }
+  ]
+  let visitedDirectories = 0
+
+  while (queue.length > 0 && visitedDirectories < MAX_PROBE_DIRECTORIES) {
+    const current = queue.shift()!
+    visitedDirectories += 1
+
+    let items: DavItem[]
+    try {
+      items = current.items || await propfind(config, current.path)
+    } catch {
+      continue
+    }
+
+    const currentUrl = normalizeResourceUrl(buildStreamUrl(config, current.path))
+    const children = items.filter(item => {
+      try {
+        return normalizeResourceUrl(buildStreamUrl(config, item.filename)) !== currentUrl
+      } catch {
+        return false
+      }
+    })
+
+    const musicFile = children.find(isMusicFile)
+    if (musicFile) return musicFile
+
+    if (current.depth >= MAX_PROBE_DEPTH) continue
+    for (const item of children) {
+      if (item.type === 'directory' && item.basename) {
+        queue.push({
+          path: joinDavPath(current.path, item.basename),
+          depth: current.depth + 1
+        })
+      }
+    }
+  }
+
+  return undefined
+}
+
+export async function testDavConnection(config: DavConfig): Promise<DavConnectionTestResult> {
+  let rootItems: DavItem[]
+  try {
+    rootItems = await propfind(config, '/')
+  } catch (e) {
+    return { success: false, stage: 'list', error: String(e) }
+  }
+
+  const file = await findProbeFile(config, rootItems)
+  if (!file) {
+    return {
+      success: true,
+      count: rootItems.length,
+      readChecked: false,
+      warning: '目录连接正常，但未找到可用于验证读取的音乐文件'
+    }
+  }
+
+  const request = buildStreamRequest(config, file.filename)
+  let response: Response
+  try {
+    response = await fetch(request.url, {
+      method: 'GET',
+      headers: {
+        ...request.headers,
+        'Range': 'bytes=0-0',
+        'X-Fetch-No-Redirect': '1',
+        'X-Fetch-Timeout-Ms': '10000'
+      }
+    })
+  } catch (e) {
+    if (isInconclusiveRangeProbeError(e)) {
+      return {
+        success: true,
+        count: rootItems.length,
+        readChecked: false,
+        warning: '目录连接正常，但服务端未返回可安全探测的音乐片段，文件读取尚未验证'
+      }
+    }
+    return { success: false, stage: 'read', error: `WebDAV 文件读取失败: ${String(e)}` }
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    return {
+      success: false,
+      stage: 'read',
+      error: 'WebDAV 文件读取返回重定向；若服务端使用 302 直链，请改为本机代理（native proxy）'
+    }
+  }
+  if (response.status !== 200 && response.status !== 206) {
+    return {
+      success: false,
+      stage: 'read',
+      error: `WebDAV 文件读取失败: ${response.status} ${response.statusText}`
+    }
+  }
+
+  return { success: true, count: rootItems.length, readChecked: true }
 }

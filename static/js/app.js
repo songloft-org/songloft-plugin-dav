@@ -127,8 +127,13 @@ async function testServer() {
         })
         const data = await res.json()
         if (data.success) {
-            showSnackbar('测试成功：连接正常')
-            testBtn.innerHTML = '<span class="material-symbols-outlined" style="color:green">check_circle</span> 测试通过'
+            if (data.readChecked) {
+                showSnackbar('测试成功：已验证一个音乐文件可读取')
+                testBtn.innerHTML = '<span class="material-symbols-outlined" style="color:green">check_circle</span> 测试通过'
+            } else {
+                showSnackbar(data.warning || '目录连接正常，但未验证文件读取')
+                testBtn.innerHTML = '<span class="material-symbols-outlined" style="color:#f59e0b">warning</span> 部分通过'
+            }
         } else {
             showSnackbar('测试失败: ' + (data.error || '未知错误'))
             testBtn.innerHTML = '<span class="material-symbols-outlined" style="color:red">error</span> 测试失败'

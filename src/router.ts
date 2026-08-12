@@ -1,7 +1,7 @@
 import { createRouter, jsonResponse, createSearchHandler, createMusicUrlHandler } from '@songloft/plugin-sdk'
 import type { HTTPRequest } from '@songloft/plugin-sdk'
 import { getConfigs, saveConfigs, getConfig, DavConfig } from './config'
-import { propfind, buildStreamRequest, buildStreamUrl } from './client'
+import { propfind, buildStreamRequest, buildStreamUrl, testDavConnection } from './client'
 
 function parseBody(req: HTTPRequest): any {
   if (!req.body) return {}
@@ -52,12 +52,7 @@ router.delete('/lists/:id', async (req: HTTPRequest, params) => {
 // 测试连接
 router.post('/test', async (req: HTTPRequest) => {
   const data = parseBody(req)
-  try {
-    const items = await propfind(data as DavConfig, '/')
-    return jsonResponse({ success: true, count: items.length })
-  } catch (e) {
-    return jsonResponse({ success: false, error: String(e) })
-  }
+  return jsonResponse(await testDavConnection(data as DavConfig))
 })
 
 // 获取特定配置下的文件/目录
