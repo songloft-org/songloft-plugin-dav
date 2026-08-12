@@ -8,7 +8,7 @@
   "license": "Apache-2.0",
   "icon": "icon.svg",
   "entryPath": "dav",
-  "main": "main.js",
+  "main": "main.jsc",
   "minHostVersion": "2.9.5",
   "permissions": [
     "storage",
@@ -19,6 +19,6 @@
   ],
   "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-dav/main/plugin.json",
   "download_url": "https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.5/dav.jsplugin.zip",
-  "entryHash": "101c4c79e98771443601bfbebd8ca34c852c36ecad7419d774ac88f993aaf5f2",
-  "zipHash": "3d2c96f431b799626ae0e71986a9216e2d10a56f000d55acab346909d6cb4ffc"
+  "entryHash": "9189a24ea9b32ae3c2a82bf44b8969fbb262804db9951e821b6959f582ef5630",
+  "zipHash": "4e0b0244d9ac9f17e4e01b8df6bede6c507b08802da7dd3f0b85e038bd231a51"
 }
