@@ -6,11 +6,12 @@
 
 - **可视化配置**：提供完整的 UI 界面以添加和管理 WebDAV 服务，支持账号密码认证。
 - **动态解析**：结合 Songloft 的播放核心，支持对 WebDAV 目录下的歌曲提供直链解析和播放功能。
+- **播放连通性检查**：连接测试会在目录枚举后验证同源音乐文件读取，并提示不兼容的 WebDAV 302 直链策略。
 - **歌单导入**：支持将 WebDAV 中的歌曲导入新歌单或添加到已有歌单。
 
 ## 📥 安装
 
-下载最新的 [v1.1.4 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.4/dav.jsplugin.zip)，然后在 Songloft 中安装。
+下载最新的 [v1.1.5 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.5/dav.jsplugin.zip)，然后在 Songloft 中安装。
 
 ## 编程语言
 JavaScript, TypeScript
