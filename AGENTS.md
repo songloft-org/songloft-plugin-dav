@@ -31,7 +31,7 @@
 - **架构模式**: 全局插件生命周期钩子 + SDK Router + WebDAV client/config 模块 + 隔离静态配置界面。
 - **核心入口**: `src/main.ts` 将 `onInit`、`onDeinit`、`onHTTPRequest` 注册到 `globalThis`，并把 HTTP 请求交给 router。
 - **核心调用链**: Songloft 调用 `onHTTPRequest` → `src/router.ts` 匹配插件路由 → `src/config.ts` 读写配置或 `src/client.ts` 发起 WebDAV 请求 → 返回 SDK `HTTPResponse`；`static/js/app.js` 通过相对插件路由和宿主 `/api/v1` 路由驱动配置、浏览与歌单导入。
-- **关键版本点**: 发布版本由 `plugin.json`、`package.json` 与 `package-lock.json` 根版本共同标识；当前为 1.1.5，最低宿主版本为 2.9.5。
+- **关键版本点**: 发布版本由 `plugin.json`、`package.json` 与 `package-lock.json` 根版本共同标识；当前为 1.2.0，最低宿主版本为 2.9.5。
 
 ## 1b. 文件信任等级
 
@@ -81,7 +81,7 @@ WebDAV 协议、认证与资源地址变更位于 `src/client.ts`；插件 HTTP 
 
 ## 9. 日志规范
 
-生命周期通过 `console.log` 记录挂载与卸载；配置读取异常通过 `songloft.logger.error` 记录。
+生命周期通过 `console.log` 记录挂载与卸载；配置读取异常通过 SDK 的 `songloft.log.error` 记录。
 
 ## 10. 提问与探索建议
 

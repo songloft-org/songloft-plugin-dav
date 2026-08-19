@@ -12,7 +12,7 @@
     <header class="app-bar">
         <span class="material-symbols-outlined">cloud_sync</span>
         <h1>WebDAV 音乐源</h1>
-        <button class="btn-icon" id="refreshBtn" title="刷新">
+        <button class="btn-icon" id="refreshBtn" title="刷新" aria-label="刷新当前数据">
             <span class="material-symbols-outlined">refresh</span>
         </button>
     </header>
@@ -102,15 +102,73 @@
         </div>
     </div>
 
+    <!-- Tab 3: 音乐库同步 -->
+    <div class="tab-content" id="tab-sync">
+        <div class="container">
+            <section class="card" aria-labelledby="syncCardTitle">
+                <div class="card-header" id="syncCardTitle">
+                    <span class="material-symbols-outlined" aria-hidden="true">library_music</span>
+                    WebDAV 音乐库同步
+                </div>
+                <div class="card-body sync-card-body">
+                    <p class="sync-description">递归扫描指定目录，为每个含音乐的目录创建并维护歌单。重扫只移除插件上次管理且本次确认消失的成员，不会删除曲库歌曲或你的手工歌单成员。</p>
+                    <div class="form-group">
+                        <label class="form-label" for="syncServerSelect">WebDAV 服务器</label>
+                        <select id="syncServerSelect" class="text-field">
+                            <option value="">请选择服务器...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="syncRootPath">扫描根目录</label>
+                        <input type="text" class="text-field" id="syncRootPath" value="/" placeholder="例如：/Music" aria-describedby="syncRootHelp" disabled>
+                        <p class="field-help" id="syncRootHelp">路径相对于当前 WebDAV 挂载根目录。同步按有界批次保存进度；关闭页面或宿主重启后，重新进入本页即可从最近检查点继续。</p>
+                    </div>
+                    <div class="sync-actions">
+                        <button class="btn-outlined" id="saveSyncRootBtn" disabled>
+                            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+                            保存扫描根
+                        </button>
+                        <button class="btn-filled" id="runSyncBtn" disabled>
+                            <span class="material-symbols-outlined" aria-hidden="true">sync</span>
+                            扫描并同步
+                        </button>
+                        <button class="btn-outlined sync-cancel-button" id="cancelSyncBtn" hidden>
+                            <span class="material-symbols-outlined" aria-hidden="true">cancel</span>
+                            取消同步
+                        </button>
+                        <button class="btn-outlined" id="retrySyncBtn" hidden>
+                            <span class="material-symbols-outlined" aria-hidden="true">restart_alt</span>
+                            重试
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" aria-labelledby="syncStatusTitle">
+                <div class="card-header" id="syncStatusTitle">
+                    <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                    最近同步状态
+                </div>
+                <div class="card-body" id="syncStatus" role="status" aria-live="polite" aria-atomic="true">
+                    <div class="empty-state">请选择服务器查看同步状态</div>
+                </div>
+            </section>
+        </div>
+    </div>
+
     <!-- Tab Bar -->
     <nav class="tab-bar" role="tablist">
-        <button class="tab-item active" data-tab="servers" role="tab">
+        <button class="tab-item active" data-tab="servers" role="tab" aria-selected="true">
             <span class="material-symbols-outlined">dns</span>
             <span>服务器管理</span>
         </button>
-        <button class="tab-item" data-tab="browser" role="tab">
+        <button class="tab-item" data-tab="browser" role="tab" aria-selected="false">
             <span class="material-symbols-outlined">folder</span>
             <span>文件浏览</span>
+        </button>
+        <button class="tab-item" data-tab="sync" role="tab" aria-selected="false">
+            <span class="material-symbols-outlined">sync</span>
+            <span>音乐库同步</span>
         </button>
     </nav>
 
@@ -129,10 +187,10 @@
     </div>
 
     <!-- Snackbar -->
-    <div id="snackbar" class="snackbar"></div>
+    <div id="snackbar" class="snackbar" role="status" aria-live="polite"></div>
 
     <!-- Progress Dialog -->
-    <div id="progressDialog" class="dialog-overlay" role="dialog" aria-modal="true">
+    <div id="progressDialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="progressTitle" aria-describedby="progressText">
         <div class="dialog" style="max-width: 320px;text-align:center;">
             <div class="dialog-title" id="progressTitle">正在处理</div>
             <div class="dialog-content" style="padding:24px 0;">

@@ -20,7 +20,7 @@ globalThis.songloft = {
     get: async () => null,
     set: async () => {},
   },
-  logger: {
+  log: {
     error() {},
   },
 }

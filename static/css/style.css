@@ -246,6 +246,15 @@
 .btn-icon.danger { color: var(--md-error); }
 .btn-icon.danger:hover { background: rgba(179,38,30,.08); }
 
+.btn-filled:focus-visible,
+.btn-outlined:focus-visible,
+.btn-text:focus-visible,
+.btn-icon:focus-visible,
+.tab-item:focus-visible {
+    outline: 2px solid var(--md-primary);
+    outline-offset: 2px;
+}
+
 /* Text Field */
 .text-field, .select-field {
     font-family: inherit;
@@ -481,6 +490,124 @@
 
 .empty-state .material-symbols-outlined { font-size: 48px; opacity: .5; }
 .empty-state p { font-size: 14px; }
+
+/* WebDAV library sync */
+.sync-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.sync-description,
+.field-help {
+    margin: 0;
+    color: var(--md-on-surface-variant);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.field-help {
+    margin-top: 6px;
+}
+
+.sync-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.sync-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.sync-metric {
+    padding: 12px;
+    border: 1px solid var(--md-outline-variant);
+    border-radius: var(--md-radius-md);
+    background: var(--md-surface-1);
+}
+
+.sync-metric-value {
+    color: var(--md-on-surface);
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.sync-metric-label,
+.sync-status-line {
+    color: var(--md-on-surface-variant);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.sync-status-line {
+    margin-top: 12px;
+}
+
+.sync-task-progress {
+    margin-top: 14px;
+}
+
+.sync-task-progress-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: var(--md-radius-full);
+    background: var(--md-surface-container-high);
+}
+
+.sync-task-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--md-primary);
+    transition: width .2s ease;
+}
+
+.sync-task-error {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--md-radius-sm);
+    background: rgba(186, 26, 26, .08);
+    color: var(--md-error);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.sync-cancel-button {
+    border-color: var(--md-error);
+    color: var(--md-error);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+@media (max-width: 520px) {
+    .sync-actions {
+        align-items: stretch;
+        flex-direction: column-reverse;
+    }
+
+    .sync-actions .btn-filled,
+    .sync-actions .btn-outlined {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .sync-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
 
 /* 歌单选择栏 — MD3 Filled style, fixed below AppBar */
 .playlist-selector {

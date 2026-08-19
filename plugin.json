@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/songloft-org/plugin-toolchain/main/schemas/plugin.schema.json",
   "name": "WebDAV 音乐源",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "通过 WebDAV 协议接入外部音乐库",
   "author": "Songloft Team",
   "homepage": "https://github.com/songloft-org/songloft-plugin-dav",
@@ -18,7 +18,7 @@
     "playlists.write"
   ],
   "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-dav/main/plugin.json",
-  "download_url": "https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.1.5/dav.jsplugin.zip",
-  "entryHash": "9189a24ea9b32ae3c2a82bf44b8969fbb262804db9951e821b6959f582ef5630",
-  "zipHash": "4e0b0244d9ac9f17e4e01b8df6bede6c507b08802da7dd3f0b85e038bd231a51"
+  "download_url": "https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.2.0/dav.jsplugin.zip",
+  "entryHash": "5dbbeb41b865a4a421f45559e1bddfb03b29f395f676cde7730701668d2577e6",
+  "zipHash": "c7dbe7fc4b5210ef57574adb87e677d15ac3d988cca280991bfa8d8f7dabf5d6"
 }

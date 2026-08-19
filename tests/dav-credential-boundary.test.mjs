@@ -20,7 +20,7 @@ globalThis.songloft = {
     get: async key => key === 'dav_configs' ? JSON.stringify([config]) : null,
     set: async () => {},
   },
-  logger: {
+  log: {
     error() {},
   },
 }
@@ -75,7 +75,7 @@ test('returns same-origin media URL without userinfo and carries UTF-8 Basic aut
   )
   const body = JSON.parse(response.body)
 
-  assert.equal(response.statusCode, 200)
+  assert.equal(response.statusCode, 200, response.body)
   assert.equal(body.url, 'https://dav.example.test/dav/%E9%9F%B3%E4%B9%90/song.mp3')
   assert.equal(body.url.includes('@'), false)
   assert.equal(
@@ -175,11 +175,11 @@ test('directory listing drops cross-origin file hrefs', async () => {
         <d:multistatus xmlns:d="DAV:">
           <d:response>
             <d:href>https://evil.example.test/stolen.mp3</d:href>
-            <d:propstat><d:prop><d:getcontentlength>7</d:getcontentlength></d:prop></d:propstat>
+            <d:propstat><d:prop><d:resourcetype/><d:getcontentlength>7</d:getcontentlength></d:prop></d:propstat>
           </d:response>
           <d:response>
             <d:href>https://dav.example.test/dav/local.mp3</d:href>
-            <d:propstat><d:prop><d:getcontentlength>9</d:getcontentlength></d:prop></d:propstat>
+            <d:propstat><d:prop><d:resourcetype/><d:getcontentlength>9</d:getcontentlength></d:prop></d:propstat>
           </d:response>
         </d:multistatus>`,
     }
@@ -188,12 +188,12 @@ test('directory listing drops cross-origin file hrefs', async () => {
   const response = await globalThis.onHTTPRequest(listItemsRequest())
   const body = JSON.parse(response.body)
 
-  assert.equal(response.statusCode, 200)
+  assert.equal(response.statusCode, 200, response.body)
   assert.equal(fetchCalls.length, 1)
   assert.equal(fetchCalls[0].url, 'https://dav.example.test/dav/')
   assert.equal(fetchCalls[0].init.headers['X-Fetch-No-Redirect'], '1')
   assert.equal(body.length, 1)
-  assert.equal(body[0].id, 'https://dav.example.test/dav/local.mp3')
+  assert.equal(body[0].id, '/local.mp3')
   assert.equal(body[0].streamUrl, 'https://dav.example.test/dav/local.mp3')
 })
 

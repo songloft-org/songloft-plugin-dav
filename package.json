@@ -1,6 +1,6 @@
 {
   "name": "dav",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "通过 WebDAV 协议接入外部音乐库",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
     "publish:release": "songloft-plugin publish"
   },
   "devDependencies": {
+    "@songloft/jsc": "2.13.0",
     "@songloft/plugin-builder": "^2.4.3",
     "@songloft/plugin-sdk": "^2.4.3",
     "esbuild": "^0.25.12",

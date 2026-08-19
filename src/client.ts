@@ -1,5 +1,4 @@
-import { songloft } from '@songloft/plugin-sdk'
-import { DavConfig } from './config'
+import type { DavConfig } from './config'
 
 function getBasicAuth(str: string): string {
   try {
@@ -27,6 +26,10 @@ export interface DavItem {
   lastmod: string
   size: number
   type: 'directory' | 'file'
+}
+
+export interface DavPropfindOptions {
+  strictStatus?: boolean
 }
 
 function extractTag(xml: string, tag: string): string {
@@ -99,6 +102,42 @@ function extractAllTags(xml: string, tag: string): string[] {
   return results
 }
 
+function countOpeningTags(xml: string, tag: string): number {
+  const searchStr = xml.toLowerCase()
+  const lowerTag = tag.toLowerCase()
+  let currentIndex = 0
+  let count = 0
+  while (true) {
+    const openIdx = searchStr.indexOf('<', currentIndex)
+    if (openIdx === -1) break
+    const closeBracketIdx = searchStr.indexOf('>', openIdx)
+    if (closeBracketIdx === -1) break
+    const tagContent = searchStr.substring(openIdx + 1, closeBracketIdx).trim()
+    const openingTag = tagContent.endsWith('/') ? tagContent.slice(0, -1).trim() : tagContent
+    if (!openingTag.startsWith('/') && (
+      openingTag === lowerTag ||
+      openingTag.endsWith(`:${lowerTag}`) ||
+      openingTag.startsWith(`${lowerTag} `) ||
+      openingTag.includes(`:${lowerTag} `)
+    )) {
+      count += 1
+    }
+    currentIndex = closeBracketIdx + 1
+  }
+  return count
+}
+
+function hasTag(xml: string, tag: string): boolean {
+  return countOpeningTags(xml, tag) > 0
+}
+
+function parseDavStatus(value: string): number | undefined {
+  const match = value.match(/(?:^|\s)(\d{3})(?:\s|$)/)
+  if (!match) return undefined
+  const status = Number(match[1])
+  return Number.isInteger(status) ? status : undefined
+}
+
 function decodeXmlEntities(str: string): string {
   return str.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g,
     (match: string, dec: string, hex: string, name: string) => {
@@ -116,18 +155,21 @@ function decodeXmlEntities(str: string): string {
   )
 }
 
-export async function propfind(config: DavConfig, path: string): Promise<DavItem[]> {
-  const encodedPath = path.split('/').map((s: string) => s ? encodeURIComponent(s) : '').join('/')
-  const url = config.url.replace(/\/$/, '') + (encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath)
+export async function propfind(
+  config: DavConfig,
+  path: string,
+  options: DavPropfindOptions = {}
+): Promise<DavItem[]> {
+  const url = buildStreamRequest(config, path, { mountRelative: true }).url
   const headers = getAuthHeader(config)
-  const reqUrl = url.replace(/([^:])\/\//g, '$1/')
   
-  const response = await fetch(reqUrl, {
+  const response = await fetch(url, {
     method: 'PROPFIND',
     headers: {
       ...headers,
       'Depth': '1',
-      'X-Fetch-No-Redirect': '1'
+      'X-Fetch-No-Redirect': '1',
+      'X-Fetch-Timeout-Ms': '15000'
     }
   })
   
@@ -137,18 +179,69 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
   if (!response.ok) {
     throw new Error(`WebDAV PROPFIND failed: ${response.status} ${response.statusText}`)
   }
+  if (response.status !== 207) {
+    throw new Error(`WebDAV PROPFIND expected 207 Multi-Status, received ${response.status}`)
+  }
   
   const xmlText = await response.text()
-  const responses = extractAllTags(xmlText, 'response')
+  const multistatusBlocks = extractAllTags(xmlText, 'multistatus')
+  if (multistatusBlocks.length !== 1) {
+    throw new Error('Malformed WebDAV multistatus response')
+  }
+  const multistatus = multistatusBlocks[0]
+  const responses = extractAllTags(multistatus, 'response')
+  if (responses.length === 0 || responses.length !== countOpeningTags(multistatus, 'response')) {
+    throw new Error('Incomplete WebDAV multistatus response')
+  }
   
   return responses.map((r: string) => {
     const href = decodeXmlEntities(extractTag(r, 'href'))
-    const decodedHref = decodeURIComponent(href)
-    let basename = decodedHref.split('/').filter(Boolean).pop() || ''
+    if (!href) throw new Error('WebDAV response is missing href')
+    let hrefPathname: string
+    try {
+      hrefPathname = new URL(href, 'http://webdav.invalid').pathname
+    } catch {
+      throw new Error('WebDAV response contains an invalid href')
+    }
+    const encodedBasename = hrefPathname.split('/').filter(Boolean).pop() || ''
+    let basename: string
+    try {
+      basename = decodeURIComponent(encodedBasename)
+    } catch {
+      throw new Error('WebDAV response contains invalid path encoding')
+    }
     
-    // Check if it's a collection
-    const propstat = extractTag(r, 'propstat')
-    const prop = extractTag(propstat, 'prop')
+    const propstats = extractAllTags(r, 'propstat')
+    if (propstats.length !== countOpeningTags(r, 'propstat')) {
+      throw new Error(`Incomplete WebDAV properties for ${basename || href}`)
+    }
+    let prop = ''
+    if (propstats.length > 0) {
+      const successfulPropstats = propstats.filter(block => {
+        const status = parseDavStatus(extractTag(block, 'status'))
+        return status === undefined
+          ? !options.strictStatus
+          : status >= 200 && status < 300
+      })
+      if (successfulPropstats.length === 0) {
+        const status = parseDavStatus(extractTag(propstats[0], 'status'))
+        const detail = status === undefined ? 'missing valid status' : String(status)
+        throw new Error(`WebDAV properties failed for ${basename || href}: ${detail}`)
+      }
+      prop = successfulPropstats.map(block => extractTag(block, 'prop')).join('')
+    } else {
+      const status = parseDavStatus(extractTag(r, 'status'))
+      if (options.strictStatus && status === undefined) {
+        throw new Error(`WebDAV resource is missing valid status for ${basename || href}`)
+      }
+      if (status !== undefined && (status < 200 || status >= 300)) {
+        throw new Error(`WebDAV resource failed for ${basename || href}: ${status}`)
+      }
+      prop = extractTag(r, 'prop')
+    }
+    if (!hasTag(prop, 'resourcetype')) {
+      throw new Error(`WebDAV response is missing resource type for ${basename || href}`)
+    }
     
     // collection is usually <d:resourcetype><d:collection/></d:resourcetype>
     const resourcetype = extractTag(prop, 'resourcetype')
@@ -158,7 +251,7 @@ export async function propfind(config: DavConfig, path: string): Promise<DavItem
     const contentLength = extractTag(prop, 'getcontentlength')
     
     return {
-      filename: decodedHref,
+      filename: href,
       basename,
       lastmod: lastmod || '',
       size: parseInt(contentLength || '0', 10),
@@ -172,6 +265,11 @@ export interface DavStreamRequest {
   headers: Record<string, string>
 }
 
+export interface DavPathOptions {
+  mountRelative?: boolean
+  legacyEndpointAliases?: boolean
+}
+
 export interface DavConnectionTestResult {
   success: boolean
   count?: number
@@ -181,7 +279,11 @@ export interface DavConnectionTestResult {
   warning?: string
 }
 
-export function buildStreamRequest(config: DavConfig, path: string): DavStreamRequest {
+export function buildStreamRequest(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): DavStreamRequest {
   const baseUrl = new URL(config.url)
   if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
     throw new Error('Unsupported WebDAV URL protocol')
@@ -194,19 +296,40 @@ export function buildStreamRequest(config: DavConfig, path: string): DavStreamRe
   let targetUrl: URL
   if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(path)) {
     targetUrl = new URL(path)
+    targetUrl.pathname = canonicalizePathname(targetUrl.pathname)
+    for (const alias of options.legacyEndpointAliases ? config.endpointAliases || [] : []) {
+      let aliasUrl: URL
+      try {
+        aliasUrl = new URL(alias)
+      } catch {
+        continue
+      }
+      if (aliasUrl.protocol !== 'http:' && aliasUrl.protocol !== 'https:') continue
+      const aliasPath = canonicalizePathname(aliasUrl.pathname)
+      if (targetUrl.origin !== aliasUrl.origin || !(
+        targetUrl.pathname === aliasPath || targetUrl.pathname.startsWith(aliasPath + '/')
+      )) continue
+      const relativePath = targetUrl.pathname.substring(aliasPath.length) || '/'
+      const search = targetUrl.search
+      targetUrl = new URL(baseUrl.toString().replace(/\/$/, '') + relativePath + search)
+      break
+    }
   } else {
     const base = baseUrl.toString().replace(/\/$/, '')
-    const configPathname = decodeURIComponent(baseUrl.pathname).replace(/\/$/, '')
-    let relativePath = path
-    if (configPathname && configPathname !== '/' && relativePath.startsWith(configPathname + '/')) {
-      relativePath = relativePath.substring(configPathname.length)
+    const configPathname = canonicalizePathname(baseUrl.pathname)
+    let relativePath = canonicalizePathname(path)
+    if (!options.mountRelative) {
+      const knownMounts = [configPathname, ...(config.mountAliases || []).map(canonicalizePathname)]
+        .filter((mount, index, mounts) => mount !== '/' && mounts.indexOf(mount) === index)
+        .sort((left, right) => right.length - left.length)
+      const matchingMount = knownMounts.find(mount =>
+        relativePath === mount || relativePath.startsWith(mount + '/')
+      )
+      if (matchingMount) {
+        relativePath = relativePath.substring(matchingMount.length) || '/'
+      }
     }
-    const encodedPath = relativePath
-      .split('/')
-      .map((segment: string) => segment ? encodeURIComponent(segment) : '')
-      .join('/')
-    const normalizedPath = encodedPath.startsWith('/') ? encodedPath : '/' + encodedPath
-    targetUrl = new URL(base + normalizedPath)
+    targetUrl = new URL(base + relativePath)
   }
 
   if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
@@ -224,14 +347,95 @@ export function buildStreamRequest(config: DavConfig, path: string): DavStreamRe
   }
 }
 
-export function buildStreamUrl(config: DavConfig, path: string): string {
-  return buildStreamRequest(config, path).url
+export function buildStreamUrl(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  return buildStreamRequest(config, path, options).url
+}
+
+function normalizeUnicode(value: string): string {
+  return typeof value.normalize === 'function' ? value.normalize('NFC') : value
+}
+
+function canonicalizePathname(pathname: string): string {
+  let canonical: string
+  try {
+    canonical = pathname
+      .split('/')
+      .map(segment => segment
+        ? encodeURIComponent(normalizeUnicode(decodeURIComponent(segment)))
+        : '')
+      .join('/')
+  } catch {
+    throw new Error('Invalid WebDAV resource path encoding')
+  }
+  if (!canonical.startsWith('/')) canonical = '/' + canonical
+  return canonical === '/' ? canonical : canonical.replace(/\/$/, '')
+}
+
+export function normalizeDavResourcePath(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  const request = buildStreamRequest(config, path, options)
+  const basePath = canonicalizePathname(new URL(config.url).pathname)
+  const resourcePath = canonicalizePathname(new URL(request.url).pathname)
+  if (resourcePath === basePath) return '/'
+  if (basePath !== '/' && !resourcePath.startsWith(basePath + '/')) {
+    throw new Error('WebDAV resource path is outside the configured mount')
+  }
+  return basePath === '/' ? resourcePath : resourcePath.substring(basePath.length)
+}
+
+export function normalizeDavScanRoot(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  const resourcePath = normalizeDavResourcePath(config, path, options)
+  return resourcePath
+    .split('/')
+    .map(segment => segment ? normalizeUnicode(decodeURIComponent(segment)) : '')
+    .join('/')
+}
+
+function requireConfigId(config: DavConfig): string {
+  if (!config.id) throw new Error('WebDAV config has no stable identity')
+  return config.id
+}
+
+export function buildDavResourceKey(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  return `dav-resource:${requireConfigId(config)}:${normalizeDavResourcePath(config, path, options)}`
+}
+
+export function buildDavDirectoryKey(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  return `dav-directory:${requireConfigId(config)}:${normalizeDavResourcePath(config, path, options)}`
+}
+
+export function buildDavSongDedupKey(
+  config: DavConfig,
+  path: string,
+  options: DavPathOptions = {}
+): string {
+  return `dav:${requireConfigId(config)}:${normalizeDavResourcePath(config, path, options)}`
 }
 
 const MAX_PROBE_DIRECTORIES = 6
 const MAX_PROBE_DEPTH = 3
-const MUSIC_FILE_EXTENSIONS = [
-  '.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.ape', '.wma', '.alac'
+export const MUSIC_FILE_EXTENSIONS = [
+  '.mp3', '.flac', '.m4a', '.m4b', '.aac', '.ogg', '.opus', '.wav', '.ape', '.wma',
+  '.alac', '.aif', '.aiff', '.mka'
 ]
 
 function normalizeResourceUrl(url: string): string {
@@ -243,7 +447,7 @@ function joinDavPath(parent: string, child: string): string {
   return `${normalizedParent}/${child}`
 }
 
-function isMusicFile(item: DavItem): boolean {
+export function isMusicFile(item: DavItem): boolean {
   const name = item.basename.toLowerCase()
   return item.type === 'file' && MUSIC_FILE_EXTENSIONS.some(ext => name.endsWith(ext))
 }

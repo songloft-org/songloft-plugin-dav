@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { getJscBinaryPath } from '@songloft/jsc'
 import { buildPlugin } from '@songloft/plugin-builder'
 import JSZip from 'jszip'
 
@@ -20,6 +22,27 @@ if (!manifestFile) {
 }
 
 const manifest = JSON.parse(await manifestFile.async('string'))
+
+// plugin-builder 2.13.0 can leave a valid main.jsc beside main.js while still
+// reporting its generic source fallback. Compile once more with the directly
+// pinned compiler so release builds do not silently lose bytecode packaging.
+if (manifest.main.endsWith('.js')) {
+  try {
+    const sourcePath = join(buildDir, manifest.main)
+    const bytecodeName = manifest.main.replace(/\.js$/, '.jsc')
+    const bytecodePath = join(buildDir, bytecodeName)
+    rmSync(bytecodePath, { force: true })
+    execFileSync(getJscBinaryPath(), [sourcePath, bytecodePath], { stdio: 'pipe' })
+    zip.remove(manifest.main)
+    zip.file(bytecodeName, readFileSync(bytecodePath))
+    rmSync(sourcePath, { force: true })
+    manifest.main = bytecodeName
+    console.log(`  🔒 explicit JSC fallback compiled ${bytecodeName}`)
+  } catch (error) {
+    console.warn(`  ⚠️  explicit JSC fallback unavailable: ${String(error)}`)
+  }
+}
+
 const declaredEntry = zip.file(manifest.main)
 if (!declaredEntry) {
   throw new Error(`Build artifact is missing declared entry ${manifest.main}`)

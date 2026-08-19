@@ -3,6 +3,9 @@ let currentPath = '/'
 let isSelectMode = false
 let selectedItems = new Map()
 let currentListItems = []
+let currentSyncRoots = []
+let currentSyncTask = null
+let activeSyncDriver = ''
 const NEW_PLAYLIST_VALUE = '__new__'
 
 // UI 工具函数
@@ -45,10 +48,15 @@ function createIcon(name, color) {
 
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'))
-    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'))
+    document.querySelectorAll('.tab-item').forEach(el => {
+        el.classList.remove('active')
+        el.setAttribute('aria-selected', 'false')
+    })
     
     document.getElementById(`tab-${tabId}`).classList.add('active')
-    document.querySelector(`.tab-item[data-tab="${tabId}"]`).classList.add('active')
+    const activeTab = document.querySelector(`.tab-item[data-tab="${tabId}"]`)
+    activeTab.classList.add('active')
+    activeTab.setAttribute('aria-selected', 'true')
 }
 
 // API 调用
@@ -66,6 +74,7 @@ async function fetchServers() {
         currentServers = data
         renderServerList()
         renderBrowserSelect()
+        await fetchSyncRoots()
     } catch (e) {
         showSnackbar('获取服务器失败: ' + e)
     }
@@ -149,10 +158,10 @@ async function testServer() {
     }
 }
 
-async function deleteServer(name) {
+async function deleteServer(id, name) {
     if (!confirm(`确定删除 ${name} 吗？`)) return
     try {
-        const res = await fetch(`./lists/${encodeURIComponent(name)}`, { 
+        const res = await fetch(`./lists/${encodeURIComponent(id)}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         })
@@ -193,7 +202,7 @@ function renderServerList() {
         deleteButton.style.color = 'var(--md-error)'
         deleteButton.title = '删除'
         deleteButton.appendChild(createIcon('delete'))
-        deleteButton.addEventListener('click', () => deleteServer(server.name))
+        deleteButton.addEventListener('click', () => deleteServer(server.id, server.name))
 
         item.append(details, deleteButton)
         container.appendChild(item)
@@ -207,12 +216,12 @@ function renderBrowserSelect() {
     select.innerHTML = '<option value="">请选择服务器...</option>'
     currentServers.forEach(server => {
         const opt = document.createElement('option')
-        opt.value = server.name
+        opt.value = server.id
         opt.textContent = server.name
         select.appendChild(opt)
     })
     
-    if (currentServers.some(s => s.name === currentVal)) {
+    if (currentServers.some(s => s.id === currentVal)) {
         select.value = currentVal
         const toggleBtn = document.getElementById('toggleSelectModeBtn')
         if (toggleBtn) toggleBtn.style.display = 'block'
@@ -222,6 +231,321 @@ function renderBrowserSelect() {
         const toggleBtn = document.getElementById('toggleSelectModeBtn')
         if (toggleBtn) toggleBtn.style.display = 'none'
         if (isSelectMode) toggleSelectMode()
+    }
+}
+
+async function fetchSyncRoots() {
+    const select = document.getElementById('syncServerSelect')
+    const selectedId = select ? select.value : ''
+    try {
+        const res = await fetch('./sync-roots', { headers: getAuthHeaders() })
+        if (!res.ok) throw new Error(await res.text())
+        currentSyncRoots = await res.json()
+        renderSyncServerSelect(selectedId)
+    } catch (e) {
+        currentSyncRoots = []
+        renderSyncServerSelect('')
+        showSnackbar('获取同步配置失败: ' + e)
+    }
+}
+
+function renderSyncServerSelect(preferredId) {
+    const select = document.getElementById('syncServerSelect')
+    const placeholder = document.createElement('option')
+    placeholder.value = ''
+    placeholder.textContent = '请选择服务器...'
+    select.replaceChildren(placeholder)
+
+    currentServers.forEach(server => {
+        const option = document.createElement('option')
+        option.value = server.id
+        option.textContent = server.name
+        select.appendChild(option)
+    })
+
+    const selectedId = currentServers.some(server => server.id === preferredId)
+        ? preferredId
+        : ''
+    select.value = selectedId
+    updateSyncSelection()
+}
+
+function getSelectedSyncRoot() {
+    const configId = document.getElementById('syncServerSelect').value
+    return currentSyncRoots.find(root => root.configId === configId)
+}
+
+function appendSyncMetric(container, value, label) {
+    const metric = document.createElement('div')
+    metric.className = 'sync-metric'
+    const metricValue = document.createElement('div')
+    metricValue.className = 'sync-metric-value'
+    metricValue.textContent = String(value)
+    const metricLabel = document.createElement('div')
+    metricLabel.className = 'sync-metric-label'
+    metricLabel.textContent = label
+    metric.append(metricValue, metricLabel)
+    container.appendChild(metric)
+}
+
+function isActiveSyncTask(task) {
+    return task && ['queued', 'scanning', 'applying'].includes(task.status)
+}
+
+function syncPhaseLabel(task) {
+    const labels = {
+        queued: '等待开始',
+        scanning: '扫描目录',
+        'validate-songs': '校验已有歌曲',
+        'adopt-songs': '领养已有导入',
+        'create-songs': '写入曲库歌曲',
+        'prepare-playlists': '准备目录歌单',
+        'add-members': '添加歌单成员',
+        'preflight-removals': '删除前完整性检查',
+        'remove-members': '移除已确认消失成员',
+        finalize: '提交成功快照',
+        succeeded: '同步成功',
+        failed: '同步失败',
+        failed_partial: '同步部分应用后失败',
+        cancelled: '已取消'
+    }
+    return labels[task?.phase] || task?.phase || '未运行'
+}
+
+function renderSyncStatus(root, task = currentSyncTask) {
+    const container = document.getElementById('syncStatus')
+    if (!root) {
+        renderMessage(container, '请选择服务器查看同步状态')
+        return
+    }
+
+    container.replaceChildren()
+    const summary = document.createElement('div')
+    summary.className = 'sync-summary'
+    if (task?.result) {
+        appendSyncMetric(summary, task.result.musicFiles, '本次发现歌曲')
+        appendSyncMetric(summary, task.result.addedMembers, '本次新增成员')
+        appendSyncMetric(summary, task.result.removedMembers, '本次移除成员')
+    } else if (task) {
+        appendSyncMetric(summary, task.progress.scannedDirectories, '已扫描目录')
+        appendSyncMetric(summary, task.progress.musicFiles, '已发现歌曲')
+        appendSyncMetric(summary, task.progress.playlistsPrepared, '已准备歌单')
+    } else {
+        appendSyncMetric(summary, root.managedPlaylistCount, '管理歌单')
+        appendSyncMetric(summary, root.managedSongCount, '管理歌曲')
+        appendSyncMetric(summary, root.generation, '同步代次')
+    }
+    container.appendChild(summary)
+
+    const status = document.createElement('div')
+    status.className = 'sync-status-line'
+    const lastSuccess = root.lastSuccessfulAt
+        ? new Date(root.lastSuccessfulAt).toLocaleString()
+        : '尚未成功同步'
+    const taskText = task
+        ? ` · 当前状态：${syncPhaseLabel(task)}`
+        : ''
+    status.textContent = `扫描根：${root.path} · 最近成功：${lastSuccess}${taskText}`
+    container.appendChild(status)
+
+    if (task) {
+        const progress = document.createElement('div')
+        progress.className = 'sync-task-progress'
+        const total = task.status === 'scanning'
+            ? task.progress.scannedDirectories + task.progress.pendingDirectories
+            : Math.max(task.progress.playlistsTotal, 1)
+        const completed = task.status === 'scanning'
+            ? task.progress.scannedDirectories
+            : task.progress.playlistsPrepared
+        const ratio = task.status === 'queued'
+            ? 0
+            : task.status === 'succeeded'
+                ? 1
+                : Math.min(completed / Math.max(total, 1), 1)
+        const track = document.createElement('div')
+        track.className = 'sync-task-progress-track'
+        track.setAttribute('role', 'progressbar')
+        track.setAttribute('aria-label', syncPhaseLabel(task))
+        track.setAttribute('aria-valuemin', '0')
+        track.setAttribute('aria-valuemax', '100')
+        track.setAttribute('aria-valuenow', String(Math.round(ratio * 100)))
+        const fill = document.createElement('div')
+        fill.className = 'sync-task-progress-fill'
+        fill.style.width = `${Math.round(ratio * 100)}%`
+        track.appendChild(fill)
+        progress.appendChild(track)
+        container.appendChild(progress)
+    }
+
+    if (task?.error) {
+        const error = document.createElement('div')
+        error.className = 'sync-task-error'
+        error.textContent = task.error
+        container.appendChild(error)
+    }
+
+    updateSyncControls(root, task)
+}
+
+function updateSyncControls(root, task) {
+    const select = document.getElementById('syncServerSelect')
+    const rootInput = document.getElementById('syncRootPath')
+    const saveButton = document.getElementById('saveSyncRootBtn')
+    const runButton = document.getElementById('runSyncBtn')
+    const cancelButton = document.getElementById('cancelSyncBtn')
+    const retryButton = document.getElementById('retrySyncBtn')
+    const enabled = Boolean(select.value && root)
+    const active = isActiveSyncTask(task)
+    rootInput.disabled = !enabled || active
+    saveButton.disabled = !enabled || active
+    runButton.disabled = !enabled || active
+    cancelButton.hidden = !active
+    retryButton.hidden = !task || !['failed', 'failed_partial', 'cancelled'].includes(task.status)
+}
+
+async function updateSyncSelection() {
+    const rootInput = document.getElementById('syncRootPath')
+    const root = getSelectedSyncRoot()
+    rootInput.value = root?.path || '/'
+    currentSyncTask = null
+    renderSyncStatus(root, null)
+    if (!root) {
+        updateSyncControls(null, null)
+        return
+    }
+    try {
+        const task = await fetchSyncTaskStatus(root.configId)
+        if (document.getElementById('syncServerSelect').value !== root.configId) return
+        currentSyncTask = task
+        renderSyncStatus(root, task)
+        if (isActiveSyncTask(task)) ensureSyncDriver(root.configId, task.taskId)
+    } catch (e) {
+        showSnackbar('获取同步任务状态失败: ' + e.message)
+    }
+}
+
+async function saveSyncRoot() {
+    const configId = document.getElementById('syncServerSelect').value
+    const path = document.getElementById('syncRootPath').value.trim() || '/'
+    if (!configId) throw new Error('请先选择 WebDAV 服务器')
+    const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ path })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '保存扫描根失败')
+    const index = currentSyncRoots.findIndex(root => root.configId === configId)
+    if (index >= 0) currentSyncRoots[index] = data
+    return data
+}
+
+async function fetchSyncTaskStatus(configId) {
+    const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/status`, {
+        headers: getAuthHeaders()
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '获取同步状态失败')
+    return data.task || null
+}
+
+function ensureSyncDriver(configId, taskId) {
+    const driverId = `${configId}:${taskId}`
+    if (activeSyncDriver === driverId) return
+    activeSyncDriver = driverId
+    driveSyncTask(configId, taskId, driverId).finally(() => {
+        if (activeSyncDriver === driverId) activeSyncDriver = ''
+    })
+}
+
+async function driveSyncTask(configId, taskId, driverId) {
+    try {
+        while (activeSyncDriver === driverId) {
+            const statusTask = await fetchSyncTaskStatus(configId)
+            if (!statusTask || statusTask.taskId !== taskId) return
+            currentSyncTask = statusTask
+            const root = currentSyncRoots.find(candidate => candidate.configId === configId)
+            renderSyncStatus(root, statusTask)
+            if (!isActiveSyncTask(statusTask)) break
+
+            const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/advance`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ taskId })
+            })
+            const task = await res.json()
+            if (!res.ok) throw new Error(task.error || '推进同步任务失败')
+            currentSyncTask = task
+            renderSyncStatus(root, task)
+            if (!isActiveSyncTask(task)) break
+            await new Promise(resolve => setTimeout(resolve, 80))
+        }
+
+        if (currentSyncTask?.taskId !== taskId) return
+        if (currentSyncTask.status === 'succeeded') {
+            const result = currentSyncTask.result
+            showSnackbar(`同步完成：发现 ${result.musicFiles} 首，新增 ${result.addedMembers}，移除 ${result.removedMembers}`)
+            await fetchSyncRoots()
+        } else if (currentSyncTask.status === 'failed') {
+            showSnackbar('同步失败，旧快照已保留: ' + currentSyncTask.error)
+        } else if (currentSyncTask.status === 'failed_partial') {
+            showSnackbar('同步部分应用后失败；旧成功快照未覆盖，请重试以收敛: ' + currentSyncTask.error)
+        } else if (currentSyncTask.status === 'cancelled') {
+            showSnackbar('同步已取消；旧成功快照未覆盖，已添加成员会在下次重试中收敛')
+        }
+    } catch (e) {
+        showSnackbar('同步任务暂停，可重新打开页面恢复: ' + e.message)
+        try {
+            currentSyncTask = await fetchSyncTaskStatus(configId)
+            renderSyncStatus(
+                currentSyncRoots.find(candidate => candidate.configId === configId),
+                currentSyncTask
+            )
+        } catch {}
+    }
+}
+
+async function runSync() {
+    const configId = document.getElementById('syncServerSelect').value
+    if (!configId) return
+    try {
+        await saveSyncRoot()
+        const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/run`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        })
+        const task = await res.json()
+        if (!res.ok) throw new Error(task.error || '启动同步失败')
+        currentSyncTask = task
+        const root = currentSyncRoots.find(candidate => candidate.configId === configId)
+        renderSyncStatus(root, task)
+        ensureSyncDriver(configId, task.taskId)
+    } catch (e) {
+        showSnackbar('启动同步失败: ' + e.message)
+    }
+}
+
+async function cancelSync() {
+    const configId = document.getElementById('syncServerSelect').value
+    const task = currentSyncTask
+    if (!configId || !isActiveSyncTask(task)) return
+    try {
+        const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/run`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ taskId: task.taskId })
+        })
+        const data = await res.json()
+        if (res.status === 409 && data.tooLate) {
+            showSnackbar('删除阶段已经开始，无法安全取消；任务会继续完成')
+            return
+        }
+        if (!res.ok) throw new Error(data.error || '取消同步失败')
+        currentSyncTask = data.task
+        renderSyncStatus(getSelectedSyncRoot(), currentSyncTask)
+        showSnackbar('已请求取消，将在当前批次结束后停止')
+    } catch (e) {
+        showSnackbar('取消失败: ' + e.message)
     }
 }
 
@@ -383,8 +707,10 @@ async function loadDirectory(serverName, path) {
 }
 
 async function submitImport(itemsToImport) {
-    const serverName = document.getElementById('browserServerSelect').value
-    if (!serverName) return null
+    const serverId = document.getElementById('browserServerSelect').value
+    if (!serverId) return null
+    const server = currentServers.find(candidate => candidate.id === serverId)
+    if (!server) throw new Error('WebDAV 配置不存在')
     
     const reqs = itemsToImport.map(item => ({
         title: item.name.replace(/\.[^.]+$/, ''),
@@ -393,8 +719,13 @@ async function submitImport(itemsToImport) {
         cover_url: '',
         duration: 0,
         plugin_entry_path: 'dav',
-        source_data: JSON.stringify({ configName: serverName, path: item.id }),
-        dedup_key: `dav_${serverName}_${item.id}`
+        source_data: JSON.stringify({
+            configId: server.id,
+            configName: server.name,
+            path: item.id,
+            pathMode: 'mount-relative'
+        }),
+        dedup_key: item.dedupKey || `dav:${server.id}:${item.id}`
     }))
     
     try {
@@ -490,6 +821,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('refreshBtn').onclick = fetchServers
     document.getElementById('addServerBtn').onclick = addServer
     document.getElementById('testServerBtn').onclick = testServer
+    document.getElementById('syncServerSelect').onchange = updateSyncSelection
+    document.getElementById('saveSyncRootBtn').onclick = async () => {
+        try {
+            const root = await saveSyncRoot()
+            currentSyncTask = await fetchSyncTaskStatus(root.configId)
+            renderSyncStatus(root, currentSyncTask)
+            showSnackbar('扫描根已保存')
+        } catch (e) {
+            showSnackbar('保存失败: ' + e.message)
+        }
+    }
+    document.getElementById('runSyncBtn').onclick = runSync
+    document.getElementById('cancelSyncBtn').onclick = cancelSync
+    document.getElementById('retrySyncBtn').onclick = runSync
     
     document.getElementById('browserServerSelect').onchange = (e) => {
         const val = e.target.value
