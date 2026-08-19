@@ -9,7 +9,7 @@ import { loadExecutablePluginBundle } from './helpers/load-plugin-bundle.mjs'
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const pluginBundle = await loadExecutablePluginBundle(repoRoot)
 
-function makeHarness() {
+function makeHarness({ backgroundTimers = false } = {}) {
   const storage = new Map()
   storage.set('dav_configs', JSON.stringify([{
     id: 'dav_task',
@@ -50,6 +50,7 @@ function makeHarness() {
   let failRemoveCall = 0
   let minimumPropfindTimeoutMs = 0
   let lastPropfindTimeoutMs = 0
+  let fakeTimerId = 0
 
   function propfindResponse(entries) {
     return {
@@ -225,6 +226,13 @@ function makeHarness() {
   }
 
   function createContext() {
+    const contextSetTimeout = backgroundTimers
+      ? setTimeout
+      : () => {
+          fakeTimerId += 1
+          return fakeTimerId
+        }
+    const contextClearTimeout = backgroundTimers ? clearTimeout : () => {}
     const context = vm.createContext({
       URL,
       URLSearchParams,
@@ -235,6 +243,8 @@ function makeHarness() {
       console,
       fetch: fetchImpl,
       songloft,
+      setTimeout: contextSetTimeout,
+      clearTimeout: contextClearTimeout,
     })
     vm.runInContext(pluginBundle, context, { filename: 'dav-main.js' })
     return context
@@ -326,6 +336,105 @@ test('sync scanning allows a slow but valid WebDAV directory to finish before it
   )).body)
   assert.equal(task.status, 'scanning', task.error)
   assert.equal(harness.lastPropfindTimeoutMs >= 20000, true)
+})
+
+test('backend runner completes a sync without client advance requests', async () => {
+  const harness = makeHarness({ backgroundTimers: true })
+  harness.directoryCount = 1
+  const context = harness.createContext()
+  await context.onInit()
+
+  const started = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/run',
+  )).body)
+  let task = started
+  for (let poll = 0; poll < 300 && ['queued', 'scanning', 'applying'].includes(task.status); poll += 1) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+    task = JSON.parse((await harness.request(
+      context,
+      'GET',
+      '/sync-roots/dav_task/status',
+    )).body).task
+  }
+
+  assert.equal(task.taskId, started.taskId)
+  assert.equal(task.status, 'succeeded', task.error)
+  assert.equal(task.result.musicFiles, 1)
+  await context.onDeinit()
+})
+
+test('onInit resumes an active sync checkpoint after the plugin VM reloads', async () => {
+  const harness = makeHarness({ backgroundTimers: true })
+  harness.directoryCount = 1
+  let context = harness.createContext()
+  await context.onInit()
+
+  const started = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/run',
+  )).body)
+  await context.onDeinit()
+
+  const paused = JSON.parse((await harness.request(
+    context,
+    'GET',
+    '/sync-roots/dav_task/status',
+  )).body).task
+  assert.equal(paused.taskId, started.taskId)
+  assert.equal(['queued', 'scanning', 'applying'].includes(paused.status), true)
+
+  context = harness.createContext()
+  await context.onInit()
+  let resumed = paused
+  for (let poll = 0; poll < 300 && ['queued', 'scanning', 'applying'].includes(resumed.status); poll += 1) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+    resumed = JSON.parse((await harness.request(
+      context,
+      'GET',
+      '/sync-roots/dav_task/status',
+    )).body).task
+  }
+
+  assert.equal(resumed.taskId, started.taskId)
+  assert.equal(resumed.status, 'succeeded', resumed.error)
+  await context.onDeinit()
+})
+
+test('background runner observes cancellation without a client advance request', async () => {
+  const harness = makeHarness({ backgroundTimers: true })
+  harness.directoryCount = 20
+  const context = harness.createContext()
+  await context.onInit()
+
+  const started = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/run',
+  )).body)
+  const cancelResponse = await harness.request(
+    context,
+    'DELETE',
+    '/sync-roots/dav_task/run',
+    { taskId: started.taskId },
+  )
+  assert.equal(cancelResponse.statusCode, 202, cancelResponse.body)
+
+  let task = JSON.parse(cancelResponse.body).task
+  for (let poll = 0; poll < 100 && ['queued', 'scanning', 'applying'].includes(task.status); poll += 1) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+    task = JSON.parse((await harness.request(
+      context,
+      'GET',
+      '/sync-roots/dav_task/status',
+    )).body).task
+  }
+
+  assert.equal(task.taskId, started.taskId)
+  assert.equal(task.status, 'cancelled', task.error)
+  await context.onDeinit()
 })
 
 test('sync task returns immediately, checkpoints across VM reload, exposes progress, and fences retries', async () => {
@@ -750,16 +859,16 @@ test('legacy-song adoption restarts a stable id-ordered page after library drift
   )
 })
 
-test('sync UI drives bounded tasks and renders task errors as text', () => {
+test('sync UI monitors backend-owned tasks and renders task errors as text', () => {
   const app = readFileSync(join(repoRoot, 'static/js/app.js'), 'utf8')
   const html = readFileSync(join(repoRoot, 'static/index.html'), 'utf8')
   assert.match(app, /fetchSyncTaskStatus/)
-  assert.match(app, /\/advance/)
-  assert.match(app, /'X-Plugin-Timeout-Ms':\s*'60000'/)
-  assert.match(app, /headers:\s*getSyncAdvanceHeaders\(\)/)
+  assert.doesNotMatch(app, /\/advance/)
+  assert.doesNotMatch(app, /X-Plugin-Timeout-Ms/)
+  assert.match(app, /SYNC_STATUS_POLL_MS/)
   assert.match(app, /method:\s*'DELETE'/)
   assert.match(app, /error\.textContent\s*=\s*task\.error/)
-  assert.match(app, /ensureSyncDriver\(root\.configId, task\.taskId\)/)
+  assert.match(app, /ensureSyncMonitor\(root\.configId, task\.taskId\)/)
   assert.match(html, /id="cancelSyncBtn"/)
   assert.match(html, /id="retrySyncBtn"/)
   assert.doesNotMatch(html, /当前请求内运行/)

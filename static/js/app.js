@@ -5,8 +5,9 @@ let selectedItems = new Map()
 let currentListItems = []
 let currentSyncRoots = []
 let currentSyncTask = null
-let activeSyncDriver = ''
+let activeSyncMonitor = ''
 const NEW_PLAYLIST_VALUE = '__new__'
+const SYNC_STATUS_POLL_MS = 1000
 
 // UI 工具函数
 function showSnackbar(message) {
@@ -78,13 +79,6 @@ function getAuthHeaders() {
     const token = SongloftPlugin.getAuthToken();
     if (token) headers['Authorization'] = 'Bearer ' + token;
     return headers;
-}
-
-function getSyncAdvanceHeaders() {
-    return {
-        ...getAuthHeaders(),
-        'X-Plugin-Timeout-Ms': '60000'
-    }
 }
 
 async function fetchServers() {
@@ -438,7 +432,7 @@ async function updateSyncSelection() {
         if (document.getElementById('syncServerSelect').value !== root.configId) return
         currentSyncTask = task
         renderSyncStatus(root, task)
-        if (isActiveSyncTask(task)) ensureSyncDriver(root.configId, task.taskId)
+        if (isActiveSyncTask(task)) ensureSyncMonitor(root.configId, task.taskId)
     } catch (e) {
         showSnackbar('获取同步任务状态失败: ' + e.message)
     }
@@ -469,36 +463,25 @@ async function fetchSyncTaskStatus(configId) {
     return data.task || null
 }
 
-function ensureSyncDriver(configId, taskId) {
-    const driverId = `${configId}:${taskId}`
-    if (activeSyncDriver === driverId) return
-    activeSyncDriver = driverId
-    driveSyncTask(configId, taskId, driverId).finally(() => {
-        if (activeSyncDriver === driverId) activeSyncDriver = ''
+function ensureSyncMonitor(configId, taskId) {
+    const monitorId = `${configId}:${taskId}`
+    if (activeSyncMonitor === monitorId) return
+    activeSyncMonitor = monitorId
+    monitorSyncTask(configId, taskId, monitorId).finally(() => {
+        if (activeSyncMonitor === monitorId) activeSyncMonitor = ''
     })
 }
 
-async function driveSyncTask(configId, taskId, driverId) {
+async function monitorSyncTask(configId, taskId, monitorId) {
     try {
-        while (activeSyncDriver === driverId) {
+        while (activeSyncMonitor === monitorId) {
             const statusTask = await fetchSyncTaskStatus(configId)
             if (!statusTask || statusTask.taskId !== taskId) return
             currentSyncTask = statusTask
             const root = currentSyncRoots.find(candidate => candidate.configId === configId)
             renderSyncStatus(root, statusTask)
             if (!isActiveSyncTask(statusTask)) break
-
-            const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/advance`, {
-                method: 'POST',
-                headers: getSyncAdvanceHeaders(),
-                body: JSON.stringify({ taskId })
-            })
-            const task = await res.json()
-            if (!res.ok) throw new Error(task.error || '推进同步任务失败')
-            currentSyncTask = task
-            renderSyncStatus(root, task)
-            if (!isActiveSyncTask(task)) break
-            await new Promise(resolve => setTimeout(resolve, 80))
+            await new Promise(resolve => setTimeout(resolve, SYNC_STATUS_POLL_MS))
         }
 
         if (currentSyncTask?.taskId !== taskId) return
@@ -514,7 +497,7 @@ async function driveSyncTask(configId, taskId, driverId) {
             showSnackbar('同步已取消；旧成功快照未覆盖，已添加成员会在下次重试中收敛')
         }
     } catch (e) {
-        showSnackbar('同步任务暂停，可重新打开页面恢复: ' + e.message)
+        showSnackbar('同步状态刷新已暂停；后台任务仍会继续: ' + e.message)
         try {
             currentSyncTask = await fetchSyncTaskStatus(configId)
             renderSyncStatus(
@@ -539,7 +522,7 @@ async function runSync() {
         currentSyncTask = task
         const root = currentSyncRoots.find(candidate => candidate.configId === configId)
         renderSyncStatus(root, task)
-        ensureSyncDriver(configId, task.taskId)
+        ensureSyncMonitor(configId, task.taskId)
     } catch (e) {
         showSnackbar('启动同步失败: ' + e.message)
     }

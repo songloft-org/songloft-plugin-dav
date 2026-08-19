@@ -21,12 +21,14 @@ import {
 } from './client'
 import { listDavSyncRoots, setDavSyncRoot } from './sync'
 import {
-  advanceDavSyncTask,
-  cancelDavSyncTask,
   deleteDavSyncTaskCheckpoints,
-  getDavSyncTask,
-  startDavSyncTask
+  getDavSyncTask
 } from './sync-task'
+import {
+  cancelDavSyncInBackground,
+  runDavSyncStep,
+  startDavSyncInBackground
+} from './sync-runner'
 
 function parseBody(req: HTTPRequest): any {
   if (!req.body) return {}
@@ -324,7 +326,7 @@ router.post('/api/music/url', createMusicUrlHandler({
   }
 }))
 
-// WebDAV 目录同步：前端/客户端用有界 advance 请求推进持久任务。
+// WebDAV 目录同步：插件后台运行器用有界步骤推进持久任务，页面只读取状态。
 router.get('/sync-roots', async () => {
   return jsonResponse(await listDavSyncRoots())
 })
@@ -344,7 +346,7 @@ router.post('/sync-roots/:id', async (req: HTTPRequest, params) => {
 
 router.post('/sync-roots/:id/run', async (_req: HTTPRequest, params) => {
   try {
-    return jsonResponse(await startDavSyncTask(params.id), 202)
+    return jsonResponse(await startDavSyncInBackground(params.id), 202)
   } catch (e) {
     const message = String(e)
     return jsonResponse({ error: message }, message.includes('not found') ? 404 : 500)
@@ -365,7 +367,8 @@ router.post('/sync-roots/:id/advance', async (req: HTTPRequest, params) => {
   const taskId = typeof data.taskId === 'string' ? data.taskId : ''
   if (!taskId) return jsonResponse({ error: 'taskId is required' }, 400)
   try {
-    return jsonResponse(await advanceDavSyncTask(params.id, taskId))
+    const current = await getDavSyncTask(params.id)
+    return jsonResponse(await runDavSyncStep(current?.configId || params.id, taskId))
   } catch (e) {
     const message = String(e)
     const status = message.includes('not found')
@@ -382,7 +385,7 @@ router.delete('/sync-roots/:id/run', async (req: HTTPRequest, params) => {
   const taskId = typeof data.taskId === 'string' ? data.taskId : ''
   if (!taskId) return jsonResponse({ error: 'taskId is required' }, 400)
   try {
-    const result = await cancelDavSyncTask(params.id, taskId)
+    const result = await cancelDavSyncInBackground(params.id, taskId)
     return jsonResponse(result, result.tooLate ? 409 : 202)
   } catch (e) {
     const message = String(e)
@@ -397,7 +400,7 @@ router.delete('/sync-roots/:id/run', async (req: HTTPRequest, params) => {
 
 router.post('/sync-roots/:id/retry', async (_req: HTTPRequest, params) => {
   try {
-    return jsonResponse(await startDavSyncTask(params.id), 202)
+    return jsonResponse(await startDavSyncInBackground(params.id), 202)
   } catch (e) {
     const message = String(e)
     return jsonResponse({ error: message }, message.includes('not found') ? 404 : 500)

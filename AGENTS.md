@@ -28,10 +28,10 @@
 ## 1. 项目上下文速查
 
 - **语言/框架**: TypeScript + JavaScript，基于 @songloft/plugin-sdk 与 @songloft/plugin-builder，插件后端面向 QuickJS 沙盒，配置界面使用原生 DOM API。
-- **架构模式**: 全局插件生命周期钩子 + SDK Router + WebDAV client/config 模块 + 隔离静态配置界面。
-- **核心入口**: `src/main.ts` 将 `onInit`、`onDeinit`、`onHTTPRequest` 注册到 `globalThis`，并把 HTTP 请求交给 router。
-- **核心调用链**: Songloft 调用 `onHTTPRequest` → `src/router.ts` 匹配插件路由 → `src/config.ts` 读写配置或 `src/client.ts` 发起 WebDAV 请求 → 返回 SDK `HTTPResponse`；`static/js/app.js` 通过相对插件路由和宿主 `/api/v1` 路由驱动配置、浏览与歌单导入。
-- **关键版本点**: 发布版本由 `plugin.json`、`package.json` 与 `package-lock.json` 根版本共同标识；当前为 1.2.2，最低宿主版本为 2.9.5。
+- **架构模式**: 全局插件生命周期钩子 + SDK Router + WebDAV client/config 模块 + 持久任务与后台运行器 + 隔离静态配置界面。
+- **核心入口**: `src/main.ts` 将 `onInit`、`onDeinit`、`onHTTPRequest` 注册到 `globalThis`，并在生命周期中恢复或停止 DAV 后台同步运行器。
+- **核心调用链**: Songloft 调用 `onHTTPRequest` → `src/router.ts` 匹配插件路由 → `src/config.ts` 读写配置或 `src/client.ts` 发起 WebDAV 请求；同步 run/retry 由 `src/sync-runner.ts` 在后台推进 `src/sync-task.ts` 检查点，`static/js/app.js` 只轮询任务状态。
+- **版本识别依据**: 发布版本由 `plugin.json`、`package.json` 与 `package-lock.json` 根版本共同标识；当前为 1.2.3，最低宿主版本为 2.9.5。
 
 ## 1b. 文件信任等级
 
@@ -51,65 +51,70 @@ TypeScript 模块使用 camelCase 函数与 PascalCase 接口；异步 I/O 使�
 
 ## 3. 架构边界规则
 
-插件后端由 `globalThis` 生命周期钩子进入；配置持久化集中在 `src/config.ts`，WebDAV 协议、认证与资源 URL 解析集中在 `src/client.ts`，HTTP 契约集中在 `src/router.ts`，静态界面通过 HTTP 边界访问插件和宿主能力。
+插件后端由 `globalThis` 生命周期钩子进入；配置持久化集中在 `src/config.ts`，WebDAV 协议、认证与资源 URL 解析集中在 `src/client.ts`，HTTP 契约集中在 `src/router.ts`，后台长任务由 `src/sync-task.ts` checkpoint 与 `src/sync-runner.ts` 共同负责。
 
 ## 4. 禁止操作清单
 
-- WebDAV 资源解析不得把认证发送给异源目标；资源 URL 仅接受 HTTP(S)，且目标 origin 与配置 origin 一致。
-- PROPFIND、封面与歌词代理不得接受重定向结果。
+- WebDAV 资源解析拒绝向异源目标发送认证信息；资源 URL 仅接受 HTTP(S)，且目标 origin 与配置 origin 一致。
+- PROPFIND、封面与歌词代理拒绝接受重定向结果。
 
 **文件编码硬约束**：严禁修改任何源文件的编码格式（UTF-8 / UTF-8 BOM / UTF-16 / GBK / GB2312 / Latin-1 等）。若编码变更看似必要，必须先获得人工确认，不得绕过。此项适用于上下文中所有 AI 操作。
 
 ## 5. 高风险文件标注
 
 - `src/client.ts`: 处理凭据、URL、XML 解析与外部 WebDAV 请求。
-- `src/router.ts`: 暴露配置写入、资源代理与播放解析 HTTP 契约。
-- `static/js/app.js`: 渲染远端元数据并调用宿主歌曲与歌单 API。
+- `src/router.ts`: 暴露配置写入、资源代理与同步任务 HTTP 契约。
+- `src/sync-runner.ts` / `src/sync-task.ts`: 负责后台调度、检查点与任务栅栏。
+- `static/js/app.js`: 渲染远端元数据并调用宿主歌曲和歌单 API。
 - `scripts/build.mjs`: 删除构建中间目录、归一化 ZIP，并改写仓库 `plugin.json` 的入口与哈希。
 
-## 6. 新增功能标准路径
+## 6. 新增功能的一般流程
 
-WebDAV 协议、认证与资源地址变更位于 `src/client.ts`；插件 HTTP 能力位于 `src/router.ts`；配置模型与持久化位于 `src/config.ts`；配置、浏览和歌单交互位于 `static/`；发布包归一化位于 `scripts/build.mjs`，相应回归位于 `tests/`。
+WebDAV 协议、认证与资源地址变更位于 `src/client.ts`；插件 HTTP 能力位于 `src/router.ts`；配置模型位于 `src/config.ts`；持久任务与后台运行位于 `src/sync-task.ts` 和 `src/sync-runner.ts`；配置与浏览交互位于 `static/`；发布包归一化位于 `scripts/build.mjs`，相应回归位于 `tests/`。
 
 ## 7. 代码安全规范
 
-资源 URL 解析限制在 HTTP(S) 与配置 origin；Basic 认证通过 header 传递并从 URL 中清除 userinfo；代理与 PROPFIND 显式拒绝重定向；远端服务器名、URL 和项目名通过 textContent 渲染。
+资源 URL 限制为 HTTP(S) 且与配置 origin 一致；Basic 认证通过 header 传递并清除 URL userinfo；远端标签使用 textContent 渲染；后台同步以持久 checkpoint、task ID 与 generation 栅栏隔离旧写入。
 
 ## 8. 多版本/多定制注意事项
 
-`plugin.json` 声明最低宿主版本 2.9.5；构建脚本兼容旧 Builder 复用 `_build` 和残留 sibling 入口的行为；Node 行为测试在发布入口为 `main.jsc` 时从 TypeScript 重建可执行 JavaScript。
+`plugin.json` 声明最低宿主版本 2.9.5；构建脚本兼容旧 Builder 复用 `_build` 和残留 sibling 入口；Node 行为测试在发布入口为 `main.jsc` 时从 TypeScript 重建可执行 JavaScript。
 
 ## 9. 日志规范
 
-生命周期通过 `console.log` 记录挂载与卸载；配置读取异常通过 SDK 的 `songloft.log.error` 记录。
+生命周期通过 `console.log` 记录挂载与卸载；配置读取异常使用 `songloft.log.error`；后台同步恢复或步骤异常使用 `console.error` 记录。
 
 ## 10. 提问与探索建议
 
-排查目录、代理或播放问题时沿 `src/main.ts` → `src/router.ts` → `src/client.ts` 跟踪；排查配置问题时同时查看 `src/config.ts`；排查凭据与 DOM 边界时查看对应安全回归；排查发布哈希时查看 `scripts/build.mjs` 与 release package contract。
+目录、代理或播放问题沿 `src/main.ts` → `src/router.ts` → `src/client.ts` 跟踪；后台同步问题继续检查 `src/sync-runner.ts` 与 `src/sync-task.ts`；配置问题检查 `src/config.ts`；发布哈希检查 `scripts/build.mjs` 与 release package contract。
 
 ## 11. 自动识别候选
 
 - WebDAV integration module: `src/client.ts`
 - Songloft plugin HTTP router: `src/router.ts`
+- DAV background sync runner: `src/sync-runner.ts`
 - Release package normalizer: `scripts/build.mjs`
-- Static configuration and library browser: `static/js/app.js`
+- Static configuration UI: `static/js/app.js`
 
 ## 12. 需人工确认
 
 - 真实 WebDAV 服务的 XML 方言、重定向和认证兼容性仍需集成环境验证。
-- 插件商店安装端到端验证依赖 Songloft 宿主；仓库当前提供最终 ZIP 契约测试。
+- 插件商店安装端到端验证依赖 Songloft 宿主；仓库提供最终 ZIP 契约测试。
 - 依赖安装命令没有独立的仓库内权威声明，使用前需由维护者补入 HARNESS。
+- v1.2.3 后台同步需在目标宿主验证关闭页面及宿主重启后的持续推进。
 
-## 13. 代码风格锚点（仓库抽样）
+## 13. 代码风格示例（仓库抽样）
 
 以下路径由扫描器按优先级从仓库抽样。**新增或修改代码应优先对齐**这些文件的组织方式（命名空间/模块分层、import/using 顺序、注释粒度、async 习惯等），避免在同目录或同层引入另一种写法。
 - `src/client.ts`
   - 结构性首行（截断）：`function getBasicAuth(str: string): string {`
 - `src/config.ts`
-  - 结构性首行（截断）：`export interface DavConfig {`
+  - 结构性首行（截断）：`export const DAV_CONFIG_SCHEMA_VERSION = 1`
 - `src/main.ts`
 - `src/router.ts`
   - 结构性首行（截断）：`function parseBody(req: HTTPRequest): any {`
+- `src/scanner.ts`
+  - 结构性首行（截断）：`type DavItem`
 
 ## 14. AI 导航知识（retro 沉淀）
 

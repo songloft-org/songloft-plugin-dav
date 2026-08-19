@@ -121,7 +121,7 @@
                     <div class="form-group">
                         <label class="form-label" for="syncRootPath">扫描根目录</label>
                         <input type="text" class="text-field" id="syncRootPath" value="/" placeholder="例如：/Music" aria-describedby="syncRootHelp" disabled>
-                        <p class="field-help" id="syncRootHelp">路径相对于当前 WebDAV 挂载根目录。同步按有界批次保存进度；关闭页面或宿主重启后，重新进入本页即可从最近检查点继续。</p>
+                        <p class="field-help" id="syncRootHelp">路径相对于当前 WebDAV 挂载根目录。同步会在插件后台按有界批次持续运行；关闭页面不影响任务，宿主重启后也会从最近检查点自动继续。</p>
                     </div>
                     <div class="sync-actions">
                         <button class="btn-outlined" id="saveSyncRootBtn" disabled>

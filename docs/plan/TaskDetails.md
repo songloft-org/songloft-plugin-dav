@@ -81,14 +81,14 @@
 - **Step 3: 固定提交门槛**
   - 只有完整扫描成功且 generation 未被更新任务取代时，才允许进入删除阶段并提交新快照。
 - **Step 4: 验证宿主约束**
-  - 在目标宿主上测量插件 HTTP 请求执行上限、后台回调和 VM 卸载/恢复；若任务不能可靠跨越单请求，D3 必须依赖宿主任务能力而不是假设 QuickJS timer 常驻。
+  - 在目标宿主上测量插件 HTTP 请求执行上限、后台 timer 处理和 VM 卸载/恢复；D3 使用持久 checkpoint 跨越单请求，并在 `onInit` 时恢复后台运行器。
 
 **实现与验证证据（2026-08-19）**：
 - `src/config.ts` 为旧配置一次性迁移并持久化稳定 ID、显示名别名、扫描根、generation、目录歌单映射和最后成功快照；配置表单只能白名单更新连接字段，不能覆盖同步状态。
 - `src/client.ts` 以稳定配置 ID 和挂载相对的规范化同源 DAV path 生成资源、目录与歌曲去重键；新 `source_data` 使用 `configId`、显式相对 path 模式，播放、封面和歌词仍兼容旧 `configName`、旧挂载 path，以及严格命中历史受信任 endpoint 的绝对 href，配置改名或更换连接端点后旧歌曲可继续解析。
 - generation 只允许完整且仍为当前代次的扫描提交快照；连接地址或凭据变化会推进 generation，旧任务不能覆盖新状态。
 - `tests/dav-sync-model.test.mjs` 覆盖旧配置/快照迁移、改名与换挂载/主机后身份稳定、相对与历史绝对 href、编码 `#/?` 路径、同名目录隔离、异源拒绝、旧 generation/不完整结果拒绝提交和手工成员删除边界。
-- D3 已完成真实宿主请求上限与 QuickJS VM 卸载/恢复验证；同步由设置页发起显式有界推进，不依赖 QuickJS timer 或单个长请求。
+- D3 已完成真实宿主请求上限与 QuickJS VM 卸载/恢复验证；同步不依赖单个长请求，v1.2.3 由插件后台 timer 推进有界步骤并在 `onInit` 时恢复，设置页只读取状态。
 
 <a id="task-d2"></a>
 ### Task D2: 手动递归扫描与目录歌单同步 MVP
@@ -143,7 +143,7 @@
 **估时**：1–2 天
 **依赖**：V1、D2；目标宿主的插件任务生命周期验证
 
-**背景**：大型曲库不能在一个插件 HTTP 请求内完成递归扫描和多轮 bridge 写入。目标宿主的插件 HTTP 调用默认约 30 秒超时，且 VM 可在空闲时卸载，因此实现选择由 UI 显式调用 `advance` 的持久状态机，不依赖长时间 QuickJS timer 或请求返回后的内存 Promise。
+**背景**：大型曲库不能在一个插件 HTTP 请求内完成递归扫描和多轮 bridge 写入。同步状态机以持久 checkpoint 拆分有界步骤；v1.2.3 将步骤推进从设置页迁移到插件后台 timer，并在 VM 重载后的 `onInit` 中恢复 active task，页面关闭不再暂停任务。
 
 **目标**：
 - 运行接口立即返回 task ID，扫描和同步通过可恢复任务状态推进。
@@ -153,6 +153,8 @@
 
 **Files:**
 - Create: `src/sync-task.ts` — 双槽持久 checkpoint、状态机、游标、进度、写前意图、取消/重试与 task/generation 栅栏
+- Create: `src/sync-runner.ts` — 后台步骤调度、同任务去重、跨配置串行与 VM 重载续跑
+- Modify: `src/main.ts` — 插件初始化恢复 active task，卸载时停止运行器
 - Modify: `src/router.ts` — `run/status/advance/cancel/retry` 路由与配置删除时 checkpoint 清理
 - Modify: `src/config.ts` — generation、临时 managed ownership、歌单创建意图和最近成功快照
 - Modify: `static/js/app.js` — “设为扫描根目录”“扫描/重扫”“取消/重试”和进度显示
@@ -164,18 +166,18 @@
   - 使用 `queued → scanning → applying → succeeded/failed/failed_partial/cancelled`；每次状态写入携带 config ID、root、task ID 与 generation。
 - **Step 2: 拆分可恢复批次**
   - 每次扫描最多执行一个 15 秒 PROPFIND；Song 每批 100、成员 add/remove 每批 200。目录游标、稳定 ID 分页锚点、应用计划和累计结果写入交替双槽 checkpoint，恢复前校验 config、task 与 generation。
-- **Step 3: 接入设置页**
-  - 读取状态并显式推进，显示扫描/应用阶段、进度、错误与最近成功时间；删除门前取消只设置意图，下一检查点退出。
+- **Step 3: 接入后台运行器与设置页**
+  - 后台运行器持续推进有界步骤；设置页只轮询并显示扫描/应用阶段、进度、错误与最近成功时间。删除门前取消只设置意图，下一检查点退出。
 - **Step 4: 宿主集成验证**
   - 用最终 `dav.jsplugin.zip` 在目标宿主以 JSC 字节码安装：`run` 在首次 PROPFIND 前返回 202；卸载 VM 后 `status` 能重新加载并恢复相同 task/checkpoint；随后通过真实 songs/playlists bridge 和本地 WebDAV fixture 完成同步。
 
 **实现与验证证据（2026-08-19）**：
-- `POST /sync-roots/:id/run` 立即返回 `{taskId,generation,status:'queued'}`；`GET status`、`POST advance`、`DELETE run` 和 `POST retry` 提供可观察、可取消、可恢复的显式推进契约。同 generation 重复 run 复用 active task，新 run/配置连接变化以 task ID + generation 双栅栏隔离旧写入。
+- `POST /sync-roots/:id/run` 立即返回 `{taskId,generation,status:'queued'}` 并启动后台运行器；`GET status`、`DELETE run` 和 `POST retry` 提供可观察、可取消、可恢复的任务契约，兼容的 `POST advance` 仍保留但设置页不再调用。同 generation 重复 run 复用 active task，新 run/配置连接变化以 task ID + generation 双栅栏隔离旧写入。
 - 任务 checkpoint 不存凭据，只存 config ID、扫描/应用游标和规范化远端路径；两个 storage 槽按单调 checkpoint 号交替写入，损坏或中断时读取较新的有效槽。删除配置同步清理两个槽。
 - Song 与歌单创建先持久化 write-ahead intent：Song 副作用后 checkpoint 丢失时先按稳定 ID 分页重新领养，不重复 upsert 覆盖用户元数据；歌单以任务专属 opaque intent marker 恢复插件刚创建的精确对象，不按普通名称认领。成员添加前持久化 provisional-managed journal，取消/失败后的新任务仍能安全清理插件已添加但尚未进入成功快照的成员。
 - 完整发现和全部添加通过后才进入删除；add/remove 分块且可重入。删除阶段已经开始时取消明确返回 409 too-late；非原子局部失败标记 `failed_partial`，不伪称回滚，重试按旧成功快照与临时 ownership 收敛。强事务 replace 仍属 H1。
-- `tests/dav-sync-task.test.mjs` 覆盖 202 立即返回、单次一个 PROPFIND、单调进度、VM context 重建、成功终态、实际 partial add 后取消及远端删除、故障持久化与 retry、apply 阶段栅栏、Song/歌单 mutation→checkpoint 注错、无重复/元数据保留、200 成员分块、稳定 ID 分页漂移、过迟取消、partial remove 和配置删除清理；全量 9 个测试文件通过。
-- 真实宿主集成使用发布 ZIP、QuickJS JSC 模式、实际数据库及 songs/playlists bridge、本地严格 WebDAV fixture，验证默认请求时限内的 202、VM 卸载/懒加载恢复和最终成功写入。执行器选定为 UI 驱动的 bounded `advance`；无人值守后台 scheduler、原子 replace、Song GC 和自动删歌单明确留给 H1。
+- `tests/dav-sync-task.test.mjs` 覆盖 202 立即返回、单次一个 PROPFIND、单调进度、VM context 重建、后台完成、`onInit` 续跑、后台取消、成功终态、实际 partial add 后取消及远端删除、故障持久化与 retry、apply 阶段栅栏、Song/歌单 mutation→checkpoint 注错、无重复/元数据保留、200 成员分块、稳定 ID 分页漂移、过迟取消、partial remove 和配置删除清理；全量 12 个测试文件通过。
+- 旧版 UI 推进执行器已使用发布 ZIP、QuickJS JSC 模式、实际数据库及 songs/playlists bridge、本地严格 WebDAV fixture 完成真实宿主集成。v1.2.3 后台执行器已有构建产物、行为测试和宿主 timer 源码证据，关闭页面及宿主重启场景仍需上线前冒烟；宿主定时发起新扫描、原子 replace、Song GC 和自动删歌单仍留给 H1。
 
 **MVP 非目标**：自动定时轮询、WebDAV change feed、父目录 bubble-up、全局 Song 删除、自动删除失效歌单，以及多个客户端同时编辑同一管理歌单的强事务一致性。
 
@@ -436,7 +438,7 @@
 - 为受管理歌单增加 `owner_plugin_entry_path + external_key` 唯一身份，插件 A 无权修改插件 B 的受管理资源。
 - 提供按插件来源与 dedup 前缀查询歌曲，以及事务化 `upsertManagedPlaylistAndReplaceSongs`，确保成员替换全成或全败。
 - 提供严格限定的孤儿清理：仅当前插件拥有、仍为 remote、且不属于用户/非管理歌单的歌曲可删除；已下载转 local 的歌曲永不删除。
-- 提供宿主 scheduler 与任务恢复契约，避免自动同步依赖 QuickJS timer 常驻和不明确的 VM 恢复语义。
+- 提供宿主 scheduler 定时发起新扫描；已发起任务的推进与 VM 恢复继续由插件持久 checkpoint 和后台运行器负责。
 
 **建议实现范围**：
 - Modify: `songloft/internal/database` — managed playlist identity、事务替换、来源过滤和安全 orphan GC
@@ -444,7 +446,7 @@
 - Modify: `songloft/internal/services` — provider-scoped scheduler 和取消/恢复语义
 - Test: 宿主 repository / service / bridge — 多插件隔离、事务回滚、用户引用保护、local 转换保护与定时恢复
 
-**备注**：宿主本地 auto-created playlist 的事务和测试可作为算法模板，但 DAV remote 不能加入同一个清理域。H1 完成前，插件 MVP 不执行全局 Song 删除，也不承诺原子 replace 或无人值守自动同步。
+**备注**：宿主本地 auto-created playlist 的事务和测试可作为算法模板，但 DAV remote 不能加入同一个清理域。H1 完成前，插件 MVP 不执行全局 Song 删除、不承诺原子 replace，也不会定时自动发起新的扫描；用户手动发起的任务可在插件后台完成。
 
 ---
 
@@ -485,7 +487,7 @@ npm run validate
 - 使用至少一个 JSON 客户端和一个 XML 客户端完成 Subsonic 冒烟。
 - 使用包含 Unicode、空格、百分号和异源绝对 `href` 的 DAV fixture 完成冒烟。
 - 使用至少两个 DAV 配置和嵌套目录完成扫描/重扫冒烟，确认同名目录隔离、用户手工成员保留、部分失败不删。
-- 在目标 Songloft 版本验证大型扫描的请求返回、显式推进、取消与 VM 恢复；当前不宣称无人值守同步。
+- 在目标 Songloft 版本验证大型扫描立即返回、关闭页面后后台推进、取消与 VM/宿主重启恢复。
 - 发布包内 manifest 哈希与实际入口和规范化 zip 内容一致。
 
 ---
@@ -498,10 +500,10 @@ npm run validate
 - **同步删除边界**：D2 / D3 不调用 `songs.delete`；只从插件管理歌单移除上次成功快照拥有且本次完整扫描确认失踪的成员。用户手工成员、普通歌单引用和 local 歌曲必须保留。
 - **非原子 bridge**：当前 add/remove 是多次调用，失败可能部分应用；实现必须先增后删、以 generation 和成功快照保证重试收敛，强事务语义留给 H1。
 - **歌单 ownership**：宿主没有 owner 字段时只信任插件持久化的 playlist ID 映射，不按名称认领或删除歌单。
-- **长任务生命周期**：目标宿主默认请求时限与 QuickJS VM 卸载/懒加载已通过发布 ZIP 实测；当前只依赖持久 checkpoint 和 UI 驱动的 bounded `advance`，不把 timer 当作 scheduler。
+- **长任务生命周期**：同步依赖持久 checkpoint 和插件后台 timer 推进有界步骤，`onInit` 恢复 active task；设置页只轮询状态。宿主 scheduler 仅用于未来定时发起新的扫描。
 - **发布确定性**：锁文件、版本和哈希不得手工分散维护，应由单一发布命令生成并校验。
 - **进度同步**：任务状态变化后，同步更新 [Dashboard.md](Dashboard.md) 的索引状态和本文件验证证据。
 
 ---
 
-*最后更新: 2026-08-19（完成 Issue #336 的 V1、D2 与 D3 手动可恢复同步；H1 强事务与无人值守调度仍为远期）*
+*最后更新: 2026-08-19（D3 已支持手动发起后由插件后台完成；H1 强事务与定时自动发起扫描仍为远期）*
