@@ -46,6 +46,19 @@ function createIcon(name, color) {
     return icon
 }
 
+function davItemDisplayName(item) {
+    if (typeof item.name === 'string' && item.name) return item.name
+    const normalizedPath = typeof item.id === 'string' ? item.id.replace(/\/$/, '') : ''
+    return normalizedPath.split('/').filter(Boolean).pop() || '目录'
+}
+
+function davDirectoryPath(item, currentDirectory) {
+    if (typeof item.id === 'string' && item.id) return item.id
+    return currentDirectory.endsWith('/')
+        ? currentDirectory + item.name
+        : currentDirectory + '/' + item.name
+}
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'))
     document.querySelectorAll('.tab-item').forEach(el => {
@@ -614,7 +627,7 @@ function renderItems(items, path) {
         details.style.cssText = 'flex:1;overflow:hidden'
         const name = document.createElement('div')
         name.style.cssText = 'font-size:14px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
-        name.textContent = item.name
+        name.textContent = davItemDisplayName(item)
         const subtitle = document.createElement('div')
         subtitle.style.cssText = 'font-size:12px;color:var(--md-on-surface-variant);margin-top:2px'
         subtitle.textContent = item.type === 'directory' ? '目录' : (item.size / 1024 / 1024).toFixed(2) + ' MB'
@@ -637,7 +650,7 @@ function renderItems(items, path) {
         el.addEventListener('click', () => {
             if (item.type === 'directory') {
                 const serverName = document.getElementById('browserServerSelect').value
-                const newPath = path.endsWith('/') ? path + item.name : path + '/' + item.name
+                const newPath = davDirectoryPath(item, path)
                 loadDirectory(serverName, newPath)
             } else {
                 if (isSelectMode) {

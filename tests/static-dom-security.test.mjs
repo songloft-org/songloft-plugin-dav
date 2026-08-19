@@ -28,5 +28,5 @@ test('DAV item IDs are not embedded in inline event handlers', () => {
 test('DAV remote labels use text-only DOM assignments', () => {
   assert.match(source, /textContent\s*=\s*server\.name/)
   assert.match(source, /textContent\s*=\s*server\.url/)
-  assert.match(source, /textContent\s*=\s*item\.name/)
+  assert.match(source, /textContent\s*=\s*davItemDisplayName\(item\)/)
 })
