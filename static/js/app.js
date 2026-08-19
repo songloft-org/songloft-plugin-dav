@@ -80,6 +80,13 @@ function getAuthHeaders() {
     return headers;
 }
 
+function getSyncAdvanceHeaders() {
+    return {
+        ...getAuthHeaders(),
+        'X-Plugin-Timeout-Ms': '60000'
+    }
+}
+
 async function fetchServers() {
     try {
         const res = await fetch('./lists', { headers: getAuthHeaders() })
@@ -483,7 +490,7 @@ async function driveSyncTask(configId, taskId, driverId) {
 
             const res = await fetch(`./sync-roots/${encodeURIComponent(configId)}/advance`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
+                headers: getSyncAdvanceHeaders(),
                 body: JSON.stringify({ taskId })
             })
             const task = await res.json()

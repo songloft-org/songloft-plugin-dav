@@ -48,6 +48,8 @@ function makeHarness() {
   let lastSongListOptions = null
   let removeCalls = 0
   let failRemoveCall = 0
+  let minimumPropfindTimeoutMs = 0
+  let lastPropfindTimeoutMs = 0
 
   function propfindResponse(entries) {
     return {
@@ -181,8 +183,12 @@ function makeHarness() {
     },
   }
 
-  async function fetchImpl(url) {
+  async function fetchImpl(url, options = {}) {
     fetchCalls += 1
+    lastPropfindTimeoutMs = Number(options.headers?.['X-Fetch-Timeout-Ms'] || 0)
+    if (lastPropfindTimeoutMs < minimumPropfindTimeoutMs) {
+      throw new Error('context deadline exceeded')
+    }
     const pathname = new URL(String(url)).pathname.replace(/\/$/, '')
     if (fixtureMode === 'failure' && pathname === '/dav/Music/D3') {
       return {
@@ -280,16 +286,47 @@ function makeHarness() {
     get maxAddBatch() { return maxAddBatch },
     get songCreateCalls() { return songCreateCalls },
     get lastSongListOptions() { return lastSongListOptions },
+    get lastPropfindTimeoutMs() { return lastPropfindTimeoutMs },
     set fixtureMode(value) { fixtureMode = value },
     set extraSong(value) { extraSong = value },
     set omitSongs(value) { omitSongs = value },
     set directoryCount(value) { directoryCount = value },
     set songsPerDirectory(value) { songsPerDirectory = value },
+    set minimumPropfindTimeoutMs(value) { minimumPropfindTimeoutMs = value },
     failNextSongCheckpoint() { failTaskCheckpointAfterSongCreate = true },
     failNextPlaylistMapping() { failConfigWriteAfterPlaylistCreate = true },
     failRemoveOnCall(value) { failRemoveCall = value },
   }
 }
+
+test('sync scanning allows a slow but valid WebDAV directory to finish before its request deadline', async () => {
+  const harness = makeHarness()
+  harness.directoryCount = 1
+  harness.minimumPropfindTimeoutMs = 20000
+  const context = harness.createContext()
+  let task = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/run',
+  )).body)
+
+  task = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/advance',
+    { taskId: task.taskId },
+  )).body)
+  assert.equal(task.status, 'scanning')
+
+  task = JSON.parse((await harness.request(
+    context,
+    'POST',
+    '/sync-roots/dav_task/advance',
+    { taskId: task.taskId },
+  )).body)
+  assert.equal(task.status, 'scanning', task.error)
+  assert.equal(harness.lastPropfindTimeoutMs >= 20000, true)
+})
 
 test('sync task returns immediately, checkpoints across VM reload, exposes progress, and fences retries', async () => {
   const harness = makeHarness()
@@ -718,6 +755,8 @@ test('sync UI drives bounded tasks and renders task errors as text', () => {
   const html = readFileSync(join(repoRoot, 'static/index.html'), 'utf8')
   assert.match(app, /fetchSyncTaskStatus/)
   assert.match(app, /\/advance/)
+  assert.match(app, /'X-Plugin-Timeout-Ms':\s*'60000'/)
+  assert.match(app, /headers:\s*getSyncAdvanceHeaders\(\)/)
   assert.match(app, /method:\s*'DELETE'/)
   assert.match(app, /error\.textContent\s*=\s*task\.error/)
   assert.match(app, /ensureSyncDriver\(root\.configId, task\.taskId\)/)

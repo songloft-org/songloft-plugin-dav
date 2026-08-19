@@ -6,7 +6,8 @@ import {
   isMusicFile,
   normalizeDavResourcePath,
   normalizeDavScanRoot,
-  propfind
+  propfind,
+  type DavItem
 } from './client'
 
 export interface DavScanLimits {
@@ -65,6 +66,8 @@ export const DEFAULT_DAV_SCAN_LIMITS: DavScanLimits = {
   maxEntries: 20000,
   maxDirectories: 2000
 }
+
+const DAV_SYNC_PROPFIND_TIMEOUT_MS = 25000
 
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -157,7 +160,15 @@ export async function scanDavDirectoryBatch(
     visited.add(current.path)
     cursor.visitedPaths.push(current.path)
 
-    const items = await propfind(config, current.path, { strictStatus: true })
+    let items: DavItem[]
+    try {
+      items = await propfind(config, current.path, {
+        strictStatus: true,
+        timeoutMs: DAV_SYNC_PROPFIND_TIMEOUT_MS
+      })
+    } catch (error) {
+      throw new Error(`WebDAV scan failed for ${current.path}: ${String(error)}`)
+    }
     const directory: ScannedDavDirectory = {
       path: current.path,
       directoryKey: buildDavDirectoryKey(config, current.path, { mountRelative: true }),

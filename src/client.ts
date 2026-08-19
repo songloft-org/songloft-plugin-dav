@@ -30,6 +30,20 @@ export interface DavItem {
 
 export interface DavPropfindOptions {
   strictStatus?: boolean
+  timeoutMs?: number
+}
+
+const DEFAULT_PROPFIND_TIMEOUT_MS = 15000
+
+function propfindTimeoutMs(options: DavPropfindOptions): number {
+  const requested = options.timeoutMs
+  if (typeof requested !== 'number' ||
+      !Number.isInteger(requested) ||
+      requested < 100 ||
+      requested > 30000) {
+    return DEFAULT_PROPFIND_TIMEOUT_MS
+  }
+  return requested
 }
 
 function extractTag(xml: string, tag: string): string {
@@ -162,6 +176,7 @@ export async function propfind(
 ): Promise<DavItem[]> {
   const url = buildStreamRequest(config, path, { mountRelative: true }).url
   const headers = getAuthHeader(config)
+  const timeoutMs = propfindTimeoutMs(options)
   
   const response = await fetch(url, {
     method: 'PROPFIND',
@@ -169,7 +184,7 @@ export async function propfind(
       ...headers,
       'Depth': '1',
       'X-Fetch-No-Redirect': '1',
-      'X-Fetch-Timeout-Ms': '15000'
+      'X-Fetch-Timeout-Ms': String(timeoutMs)
     }
   })
   

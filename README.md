@@ -14,7 +14,7 @@
 
 ## 📥 安装
 
-下载最新的 [v1.2.1 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.2.1/dav.jsplugin.zip)，然后在 Songloft 中安装。正式 Release 发布前，内测用户可直接安装仓库构建出的 `dist/dav.jsplugin.zip`。
+下载最新的 [v1.2.2 发布包](https://github.com/songloft-org/songloft-plugin-dav/releases/download/v1.2.2/dav.jsplugin.zip)，然后在 Songloft 中安装。正式 Release 发布前，内测用户可直接安装仓库构建出的 `dist/dav.jsplugin.zip`。
 
 ## 编程语言
 JavaScript, TypeScript
